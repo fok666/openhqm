@@ -3,6 +3,8 @@
 ## Project Overview
 OpenHQM is an asynchronous HTTP request processing system built with Python and FastAPI. It uses message queues (Redis Streams, Kafka, or SQS) to decouple request submission from processing, enabling scalable, non-blocking request handling.
 
+See [SDD](../SDD.md) for details.
+
 **Proxy Mode**: OpenHQM can operate as an asynchronous reverse proxy, forwarding requests to configured backend endpoints with support for multiple authentication methods, transparent header forwarding, and full response capture. See [PROXY_MODE.md](../docs/PROXY_MODE.md) for details.
 
 ## Code Style and Conventions
