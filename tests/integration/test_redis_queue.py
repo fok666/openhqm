@@ -1,7 +1,8 @@
 """Integration tests for Redis queue."""
 
-import pytest
 import asyncio
+
+import pytest
 
 from openhqm.queue.redis_queue import RedisQueue
 
@@ -14,10 +15,7 @@ async def test_redis_queue_publish_consume():
     await queue.connect()
 
     # Publish message
-    message = {
-        "correlation_id": "test-123",
-        "payload": {"data": "test"}
-    }
+    message = {"correlation_id": "test-123", "payload": {"data": "test"}}
 
     success = await queue.publish("test-queue", message)
     assert success is True
@@ -29,9 +27,7 @@ async def test_redis_queue_publish_consume():
         received.append(msg)
 
     # Start consumer in background
-    consumer_task = asyncio.create_task(
-        queue.consume("test-queue", handler, batch_size=1)
-    )
+    consumer_task = asyncio.create_task(queue.consume("test-queue", handler, batch_size=1))
 
     # Wait for message processing
     await asyncio.sleep(2)

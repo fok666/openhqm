@@ -11,8 +11,9 @@ Standardized interface supporting multiple queue backends:
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Callable, Optional, List
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -20,19 +21,19 @@ class QueueMessage:
     """Standardized queue message structure."""
 
     id: str
-    body: Dict[str, Any]
-    attributes: Dict[str, str]
+    body: dict[str, Any]
+    attributes: dict[str, str]
     timestamp: float
     retry_count: int = 0
-    
+
     # Backend-specific metadata (optional)
-    raw_message: Optional[Any] = None
+    raw_message: Any | None = None
 
 
 class MessageQueueInterface(ABC):
     """
     Abstract interface for message queue implementations.
-    
+
     This interface provides a standardized API for different queue backends.
     All implementations must support:
     - Connection management
@@ -46,7 +47,7 @@ class MessageQueueInterface(ABC):
     async def connect(self) -> None:
         """
         Establish connection to the queue backend.
-        
+
         Raises:
             QueueError: If connection fails
         """
@@ -61,9 +62,9 @@ class MessageQueueInterface(ABC):
     async def publish(
         self,
         queue_name: str,
-        message: Dict[str, Any],
+        message: dict[str, Any],
         priority: int = 0,
-        attributes: Optional[Dict[str, str]] = None,
+        attributes: dict[str, str] | None = None,
         delay_seconds: int = 0,
     ) -> str:
         """
@@ -94,7 +95,7 @@ class MessageQueueInterface(ABC):
     ) -> None:
         """
         Consume messages from queue and process with handler.
-        
+
         This is a long-running operation that continuously polls for messages.
         The handler should be an async function that processes the message.
 
@@ -113,7 +114,7 @@ class MessageQueueInterface(ABC):
     async def acknowledge(self, message_id: str) -> bool:
         """
         Acknowledge successful message processing.
-        
+
         This removes the message from the queue permanently.
 
         Args:
@@ -129,14 +130,14 @@ class MessageQueueInterface(ABC):
 
     @abstractmethod
     async def reject(
-        self, 
-        message_id: str, 
+        self,
+        message_id: str,
         requeue: bool = True,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> bool:
         """
         Reject a message, optionally requeuing it.
-        
+
         If requeue=False, the message is typically moved to a dead letter queue.
 
         Args:
@@ -156,7 +157,7 @@ class MessageQueueInterface(ABC):
     async def get_queue_depth(self, queue_name: str) -> int:
         """
         Get the approximate current depth of a queue.
-        
+
         Note: This may be approximate for distributed queues.
 
         Args:
@@ -173,7 +174,7 @@ class MessageQueueInterface(ABC):
     async def health_check(self) -> bool:
         """
         Check if queue backend is healthy and responsive.
-        
+
         Returns:
             True if healthy, False otherwise
         """
@@ -186,13 +187,13 @@ class MessageQueueInterface(ABC):
     async def create_queue(self, queue_name: str, **kwargs) -> bool:
         """
         Create a new queue/topic if it doesn't exist.
-        
+
         Optional method - not all backends require explicit creation.
-        
+
         Args:
             queue_name: Queue/topic name to create
             **kwargs: Backend-specific configuration
-            
+
         Returns:
             True if created successfully
         """
@@ -202,12 +203,12 @@ class MessageQueueInterface(ABC):
     async def delete_queue(self, queue_name: str) -> bool:
         """
         Delete a queue/topic.
-        
+
         Optional method - use with caution in production.
-        
+
         Args:
             queue_name: Queue/topic name to delete
-            
+
         Returns:
             True if deleted successfully
         """
@@ -217,10 +218,10 @@ class MessageQueueInterface(ABC):
     async def purge_queue(self, queue_name: str) -> int:
         """
         Remove all messages from a queue.
-        
+
         Args:
             queue_name: Queue name to purge
-            
+
         Returns:
             Number of messages purged
         """
@@ -231,13 +232,13 @@ class MessageQueueInterface(ABC):
 class MessageQueueFactory:
     """Factory for creating queue instances based on configuration."""
 
-    _registry: Dict[str, type] = {}
+    _registry: dict[str, type] = {}
 
     @classmethod
     def register(cls, queue_type: str, queue_class: type) -> None:
         """
         Register a queue implementation.
-        
+
         Args:
             queue_type: Queue type identifier (e.g., "redis", "kafka")
             queue_class: Queue class implementing MessageQueueInterface
@@ -248,31 +249,28 @@ class MessageQueueFactory:
     def create(cls, queue_type: str, **kwargs) -> MessageQueueInterface:
         """
         Create a queue instance.
-        
+
         Args:
             queue_type: Queue type identifier
             **kwargs: Queue-specific configuration
-            
+
         Returns:
             Queue instance
-            
+
         Raises:
             ValueError: If queue type is not registered
         """
         queue_class = cls._registry.get(queue_type.lower())
         if not queue_class:
             available = ", ".join(cls._registry.keys())
-            raise ValueError(
-                f"Unknown queue type: {queue_type}. "
-                f"Available types: {available}"
-            )
+            raise ValueError(f"Unknown queue type: {queue_type}. Available types: {available}")
         return queue_class(**kwargs)
 
     @classmethod
-    def list_types(cls) -> List[str]:
+    def list_types(cls) -> list[str]:
         """
         Get list of registered queue types.
-        
+
         Returns:
             List of queue type identifiers
         """

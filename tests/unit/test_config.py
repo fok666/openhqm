@@ -1,9 +1,6 @@
 """Unit tests for configuration."""
 
-import os
-import pytest
-
-from openhqm.config.settings import Settings, QueueSettings, WorkerSettings
+from openhqm.config.settings import QueueSettings, Settings, WorkerSettings
 
 
 def test_default_settings():

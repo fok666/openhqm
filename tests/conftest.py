@@ -1,11 +1,12 @@
 """Test configuration and fixtures."""
 
-import pytest
 import asyncio
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
-from openhqm.queue.redis_queue import RedisQueue
+import pytest
+
 from openhqm.cache.redis_cache import RedisCache
+from openhqm.queue.redis_queue import RedisQueue
 
 
 @pytest.fixture(scope="session")

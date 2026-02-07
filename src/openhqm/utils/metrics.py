@@ -1,7 +1,6 @@
 """Prometheus metrics for monitoring."""
 
-from prometheus_client import Counter, Histogram, Gauge, CollectorRegistry
-from openhqm.config import settings
+from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
 # Create registry
 registry = CollectorRegistry()

@@ -1,15 +1,16 @@
 """Redis Streams implementation of message queue."""
 
-import json
 import asyncio
-from typing import Dict, Any, Callable, Optional
+import json
+from collections.abc import Callable
+from typing import Any
 
 import redis.asyncio as aioredis
 import structlog
 
-from openhqm.queue.interface import MessageQueueInterface
-from openhqm.exceptions import QueueError
 from openhqm.config import settings
+from openhqm.exceptions import QueueError
+from openhqm.queue.interface import MessageQueueInterface
 
 logger = structlog.get_logger(__name__)
 
@@ -27,7 +28,7 @@ class RedisQueue(MessageQueueInterface):
         """
         self.url = url
         self.max_connections = max_connections
-        self.redis: Optional[aioredis.Redis] = None
+        self.redis: aioredis.Redis | None = None
         self.consumer_group = "openhqm-workers"
         self.consumer_name = f"consumer-{id(self)}"
         self._running = False
@@ -56,7 +57,7 @@ class RedisQueue(MessageQueueInterface):
     async def publish(
         self,
         queue_name: str,
-        message: Dict[str, Any],
+        message: dict[str, Any],
         priority: int = 0,
     ) -> bool:
         """
@@ -74,7 +75,9 @@ class RedisQueue(MessageQueueInterface):
             raise QueueError("Not connected to Redis")
 
         try:
-            stream_name = f"{settings.queue.request_queue_name if queue_name == 'requests' else queue_name}"
+            stream_name = (
+                f"{settings.queue.request_queue_name if queue_name == 'requests' else queue_name}"
+            )
 
             # Serialize message
             message_data = {"payload": json.dumps(message)}
@@ -102,7 +105,7 @@ class RedisQueue(MessageQueueInterface):
     async def consume(
         self,
         queue_name: str,
-        handler: Callable[[Dict[str, Any]], Any],
+        handler: Callable[[dict[str, Any]], Any],
         batch_size: int = 1,
     ) -> None:
         """
@@ -116,7 +119,9 @@ class RedisQueue(MessageQueueInterface):
         if not self.redis:
             raise QueueError("Not connected to Redis")
 
-        stream_name = f"{settings.queue.request_queue_name if queue_name == 'requests' else queue_name}"
+        stream_name = (
+            f"{settings.queue.request_queue_name if queue_name == 'requests' else queue_name}"
+        )
 
         # Create consumer group if it doesn't exist
         try:
@@ -153,7 +158,7 @@ class RedisQueue(MessageQueueInterface):
                 if not messages:
                     continue
 
-                for stream, stream_messages in messages:
+                for _stream, stream_messages in messages:
                     for message_id, message_data in stream_messages:
                         try:
                             # Deserialize message
@@ -232,7 +237,9 @@ class RedisQueue(MessageQueueInterface):
             return 0
 
         try:
-            stream_name = f"{settings.queue.request_queue_name if queue_name == 'requests' else queue_name}"
+            stream_name = (
+                f"{settings.queue.request_queue_name if queue_name == 'requests' else queue_name}"
+            )
             info = await self.redis.xpending(stream_name, self.consumer_group)
             return info["pending"] if info else 0
         except Exception:

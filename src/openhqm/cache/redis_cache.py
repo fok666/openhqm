@@ -1,13 +1,12 @@
 """Redis cache implementation."""
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 import redis.asyncio as aioredis
 import structlog
 
 from openhqm.cache.interface import CacheInterface
-from openhqm.config import settings
 
 logger = structlog.get_logger(__name__)
 
@@ -27,7 +26,7 @@ class RedisCache(CacheInterface):
         self.url = url
         self.default_ttl = default_ttl
         self.max_connections = max_connections
-        self.redis: Optional[aioredis.Redis] = None
+        self.redis: aioredis.Redis | None = None
 
     async def connect(self) -> None:
         """Connect to Redis."""
@@ -39,7 +38,7 @@ class RedisCache(CacheInterface):
         await self.redis.ping()
         logger.info("Connected to Redis cache", url=self.url)
 
-    async def get(self, key: str) -> Optional[Dict[str, Any]]:
+    async def get(self, key: str) -> dict[str, Any] | None:
         """
         Get value from cache.
 
@@ -64,8 +63,8 @@ class RedisCache(CacheInterface):
     async def set(
         self,
         key: str,
-        value: Dict[str, Any],
-        ttl: Optional[int] = None,
+        value: dict[str, Any],
+        ttl: int | None = None,
     ) -> bool:
         """
         Set value in cache.

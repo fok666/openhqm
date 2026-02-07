@@ -1,21 +1,21 @@
 """Worker implementation for processing messages."""
 
-import signal
 import asyncio
+import signal
 import time
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Any
 
 import structlog
 
-from openhqm.worker.processor import MessageProcessor
-from openhqm.queue.interface import MessageQueueInterface
-from openhqm.cache.interface import CacheInterface
-from openhqm.queue.factory import create_queue
 from openhqm.cache.factory import create_cache
-from openhqm.exceptions import RetryableError, FatalError
-from openhqm.utils.metrics import metrics
+from openhqm.cache.interface import CacheInterface
 from openhqm.config import settings
+from openhqm.exceptions import FatalError, RetryableError
+from openhqm.queue.factory import create_queue
+from openhqm.queue.interface import MessageQueueInterface
+from openhqm.utils.metrics import metrics
+from openhqm.worker.processor import MessageProcessor
 
 logger = structlog.get_logger(__name__)
 
@@ -44,7 +44,7 @@ class Worker:
         self.cache = cache
         self.processor = processor
         self.running = False
-        self.current_message: Optional[str] = None
+        self.current_message: str | None = None
 
     async def start(self) -> None:
         """Start the worker loop."""
@@ -65,13 +65,13 @@ class Worker:
                 self._handle_message,
                 batch_size=settings.worker.batch_size,
             )
-        except Exception as e:
+        except Exception:
             logger.exception("Worker loop failed", worker_id=self.worker_id)
             raise
         finally:
             await self.shutdown()
 
-    async def _handle_message(self, message: Dict[str, Any]) -> None:
+    async def _handle_message(self, message: dict[str, Any]) -> None:
         """
         Process a single message.
 
@@ -190,7 +190,7 @@ class Worker:
         finally:
             self.current_message = None
 
-    async def _send_to_dlq(self, message: Dict[str, Any], error: str) -> None:
+    async def _send_to_dlq(self, message: dict[str, Any], error: str) -> None:
         """
         Send failed message to dead letter queue.
 

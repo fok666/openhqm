@@ -1,7 +1,7 @@
 """HTTP API listener entrypoint."""
 
-import uvicorn
 import structlog
+import uvicorn
 
 from openhqm.api.app import create_app
 from openhqm.config import settings

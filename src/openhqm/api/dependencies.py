@@ -1,11 +1,9 @@
 """Dependency injection for FastAPI."""
 
-from typing import AsyncGenerator
-
-from openhqm.queue.factory import create_queue
-from openhqm.queue.interface import MessageQueueInterface
 from openhqm.cache.factory import create_cache
 from openhqm.cache.interface import CacheInterface
+from openhqm.queue.factory import create_queue
+from openhqm.queue.interface import MessageQueueInterface
 
 # Global instances
 _queue_instance: MessageQueueInterface | None = None

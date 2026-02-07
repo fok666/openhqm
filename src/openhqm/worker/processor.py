@@ -1,15 +1,13 @@
 """Message processor for proxying requests to configured endpoints."""
 
-import asyncio
 import base64
-from datetime import datetime
-from typing import Dict, Any, Optional, Tuple
+from typing import Any
 
 import aiohttp
 import structlog
 
-from openhqm.config.settings import settings, EndpointConfig
-from openhqm.exceptions import ProcessingError, ConfigurationError
+from openhqm.config.settings import EndpointConfig, settings
+from openhqm.exceptions import ConfigurationError, ProcessingError
 
 logger = structlog.get_logger(__name__)
 
@@ -19,7 +17,7 @@ class MessageProcessor:
 
     def __init__(self):
         """Initialize the processor."""
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create HTTP session."""
@@ -33,7 +31,7 @@ class MessageProcessor:
         if self._session and not self._session.closed:
             await self._session.close()
 
-    def _prepare_auth_headers(self, endpoint_config: EndpointConfig) -> Dict[str, str]:
+    def _prepare_auth_headers(self, endpoint_config: EndpointConfig) -> dict[str, str]:
         """Prepare authentication headers based on endpoint configuration."""
         headers = {}
 
@@ -59,8 +57,8 @@ class MessageProcessor:
     def _merge_headers(
         self,
         endpoint_config: EndpointConfig,
-        request_headers: Optional[Dict[str, str]] = None,
-    ) -> Dict[str, str]:
+        request_headers: dict[str, str] | None = None,
+    ) -> dict[str, str]:
         """Merge headers from configuration and request."""
         headers = {}
 
@@ -86,7 +84,7 @@ class MessageProcessor:
 
         return headers
 
-    def _get_endpoint_config(self, endpoint_name: Optional[str] = None) -> EndpointConfig:
+    def _get_endpoint_config(self, endpoint_name: str | None = None) -> EndpointConfig:
         """Get endpoint configuration by name or default."""
         if not settings.proxy.enabled:
             raise ConfigurationError("Proxy mode is not enabled")
@@ -110,10 +108,10 @@ class MessageProcessor:
 
     async def process(
         self,
-        payload: Dict[str, Any],
-        metadata: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
-    ) -> Tuple[Dict[str, Any], int, Dict[str, str]]:
+        payload: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> tuple[dict[str, Any], int, dict[str, str]]:
         """
         Process message by forwarding to configured endpoint.
 
@@ -189,7 +187,7 @@ class MessageProcessor:
         except aiohttp.ClientError as e:
             logger.error("HTTP client error", endpoint=endpoint_name, error=str(e))
             raise ProcessingError(f"Failed to proxy request: {e}")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error("Request timeout", endpoint=endpoint_name)
             raise ProcessingError("Request timeout")
         except Exception as e:

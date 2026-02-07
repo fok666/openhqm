@@ -2,21 +2,20 @@
 
 import uuid
 from datetime import datetime
-from typing import Dict
 
-from fastapi import APIRouter, HTTPException, Depends, status
 import structlog
+from fastapi import APIRouter, Depends, HTTPException, status
 
+from openhqm.api.dependencies import get_cache, get_queue
 from openhqm.api.models import (
+    RequestStatus,
+    ResultResponse,
+    StatusResponse,
     SubmitRequest,
     SubmitResponse,
-    StatusResponse,
-    ResultResponse,
-    RequestStatus,
 )
-from openhqm.queue.interface import MessageQueueInterface
 from openhqm.cache.interface import CacheInterface
-from openhqm.api.dependencies import get_queue, get_cache
+from openhqm.queue.interface import MessageQueueInterface
 from openhqm.utils.metrics import metrics
 
 logger = structlog.get_logger(__name__)
@@ -219,9 +218,7 @@ async def get_response(
                 status=req_status,
                 error=response_data.get("error") if response_data else "Processing failed",
                 completed_at=(
-                    datetime.fromisoformat(response_data["completed_at"])
-                    if response_data
-                    else None
+                    datetime.fromisoformat(response_data["completed_at"]) if response_data else None
                 ),
             )
         else:

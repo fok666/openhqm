@@ -1,14 +1,14 @@
 """Cache interface definition."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class CacheInterface(ABC):
     """Abstract interface for cache implementations."""
 
     @abstractmethod
-    async def get(self, key: str) -> Optional[Dict[str, Any]]:
+    async def get(self, key: str) -> dict[str, Any] | None:
         """
         Get value from cache.
 
@@ -24,8 +24,8 @@ class CacheInterface(ABC):
     async def set(
         self,
         key: str,
-        value: Dict[str, Any],
-        ttl: Optional[int] = None,
+        value: dict[str, Any],
+        ttl: int | None = None,
     ) -> bool:
         """
         Set value in cache.

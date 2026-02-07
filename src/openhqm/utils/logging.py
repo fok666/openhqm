@@ -2,9 +2,9 @@
 
 import logging
 import sys
-from typing import Any, Dict
 
 import structlog
+
 from openhqm.config import settings
 
 

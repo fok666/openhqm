@@ -1,21 +1,21 @@
 """FastAPI application factory."""
 
-from datetime import datetime
 from contextlib import asynccontextmanager
+from datetime import datetime
 
+import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response
-import structlog
 
 from openhqm import __version__
-from openhqm.api.routes import router
+from openhqm.api.dependencies import cleanup_resources, get_cache, get_queue
 from openhqm.api.models import HealthResponse
-from openhqm.api.dependencies import get_queue, get_cache, cleanup_resources
+from openhqm.api.routes import router
+from openhqm.config import settings
 from openhqm.utils.logging import setup_logging
 from openhqm.utils.metrics import metrics
-from openhqm.config import settings
 
 logger = structlog.get_logger(__name__)
 
@@ -29,8 +29,8 @@ async def lifespan(app: FastAPI):
 
     # Initialize queue and cache
     try:
-        queue = await get_queue()
-        cache = await get_cache()
+        await get_queue()
+        await get_cache()
         logger.info("Resources initialized successfully")
     except Exception as e:
         logger.error("Failed to initialize resources", error=str(e))
@@ -73,18 +73,20 @@ def create_app() -> FastAPI:
         components = {"api": "healthy"}
 
         try:
-            queue = await get_queue()
+            await get_queue()
             components["queue"] = "healthy"
         except Exception:
             components["queue"] = "unhealthy"
 
         try:
-            cache = await get_cache()
+            await get_cache()
             components["cache"] = "healthy"
         except Exception:
             components["cache"] = "unhealthy"
 
-        overall_status = "healthy" if all(v == "healthy" for v in components.values()) else "degraded"
+        overall_status = (
+            "healthy" if all(v == "healthy" for v in components.values()) else "degraded"
+        )
 
         return HealthResponse(
             status=overall_status,

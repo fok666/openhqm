@@ -6,12 +6,12 @@ import pytest
 from pydantic import ValidationError
 
 from openhqm.api.models import (
+    RequestMetadata,
+    RequestStatus,
+    ResultResponse,
+    StatusResponse,
     SubmitRequest,
     SubmitResponse,
-    StatusResponse,
-    ResultResponse,
-    RequestStatus,
-    RequestMetadata,
 )
 
 
