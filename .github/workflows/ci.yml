@@ -256,7 +256,7 @@ jobs:
       actions: read
     steps:
       - name: Download image size artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           pattern: image-size-*
           path: image-sizes/
