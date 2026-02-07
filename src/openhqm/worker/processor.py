@@ -213,10 +213,10 @@ class MessageProcessor:
 
         except aiohttp.ClientError as e:
             logger.error("HTTP client error", endpoint=endpoint_name, error=str(e))
-            raise ProcessingError(f"Failed to proxy request: {e}")
+            raise ProcessingError(f"Failed to proxy request: {e}") from e
         except TimeoutError:
             logger.error("Request timeout", endpoint=endpoint_name)
-            raise ProcessingError("Request timeout")
+            raise ProcessingError("Request timeout") from None
         except Exception as e:
             logger.exception("Unexpected error during proxying", endpoint=endpoint_name)
-            raise ProcessingError(f"Unexpected error: {e}")
+            raise ProcessingError(f"Unexpected error: {e}") from e

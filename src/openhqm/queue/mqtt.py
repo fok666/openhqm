@@ -95,10 +95,10 @@ class MQTTQueue(MessageQueueInterface):
         except ImportError:
             raise QueueError(
                 "MQTT dependencies not installed. Install with: pip install asyncio-mqtt"
-            )
+            ) from None
         except Exception as e:
             logger.error("Failed to connect to MQTT broker", error=str(e))
-            raise QueueError(f"Failed to connect to MQTT broker: {e}")
+            raise QueueError(f"Failed to connect to MQTT broker: {e}") from e
 
     async def disconnect(self) -> None:
         """Close connection to MQTT broker."""
@@ -160,7 +160,7 @@ class MQTTQueue(MessageQueueInterface):
 
         except Exception as e:
             logger.error("Failed to publish to MQTT", error=str(e))
-            raise QueueError(f"Failed to publish to MQTT: {e}")
+            raise QueueError(f"Failed to publish to MQTT: {e}") from e
 
     async def consume(
         self,
@@ -230,7 +230,7 @@ class MQTTQueue(MessageQueueInterface):
 
         except Exception as e:
             logger.error("Error consuming from MQTT", error=str(e))
-            raise QueueError(f"Error consuming from MQTT: {e}")
+            raise QueueError(f"Error consuming from MQTT: {e}") from e
 
     async def acknowledge(self, message_id: str) -> bool:
         """

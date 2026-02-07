@@ -151,4 +151,4 @@ async def create_queue() -> MessageQueueInterface:
         return queue
     except Exception as e:
         logger.error("Failed to create queue", type=queue_type, error=str(e))
-        raise QueueError(f"Failed to create {queue_type} queue: {e}")
+        raise QueueError(f"Failed to create {queue_type} queue: {e}") from e

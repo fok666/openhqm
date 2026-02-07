@@ -92,10 +92,10 @@ class AzureEventHubsQueue(MessageQueueInterface):
             raise QueueError(
                 "Azure Event Hubs dependencies not installed. "
                 "Install with: pip install azure-eventhub azure-eventhub-checkpointstoreblob-aio"
-            )
+            ) from None
         except Exception as e:
             logger.error("Failed to connect to Azure Event Hubs", error=str(e))
-            raise QueueError(f"Failed to connect to Azure Event Hubs: {e}")
+            raise QueueError(f"Failed to connect to Azure Event Hubs: {e}") from e
 
     async def disconnect(self) -> None:
         """Close connection to Azure Event Hubs."""
@@ -158,7 +158,7 @@ class AzureEventHubsQueue(MessageQueueInterface):
 
         except Exception as e:
             logger.error("Failed to publish to Event Hub", error=str(e))
-            raise QueueError(f"Failed to publish to Event Hub: {e}")
+            raise QueueError(f"Failed to publish to Event Hub: {e}") from e
 
     async def consume(
         self,
@@ -212,7 +212,7 @@ class AzureEventHubsQueue(MessageQueueInterface):
                 )
         except Exception as e:
             logger.error("Error consuming from Event Hub", error=str(e))
-            raise QueueError(f"Error consuming from Event Hub: {e}")
+            raise QueueError(f"Error consuming from Event Hub: {e}") from e
 
     async def acknowledge(self, message_id: str) -> bool:
         """

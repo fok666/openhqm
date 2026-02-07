@@ -107,7 +107,7 @@ async def submit_request(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to submit request",
-        )
+        ) from e
 
 
 @router.get(
@@ -159,7 +159,7 @@ async def get_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve status",
-        )
+        ) from e
 
 
 @router.get(
@@ -235,4 +235,4 @@ async def get_response(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve response",
-        )
+        ) from e

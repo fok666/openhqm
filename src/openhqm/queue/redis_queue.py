@@ -45,7 +45,7 @@ class RedisQueue(MessageQueueInterface):
             logger.info("Connected to Redis", url=self.url)
         except Exception as e:
             logger.error("Failed to connect to Redis", error=str(e))
-            raise QueueError(f"Failed to connect to Redis: {e}")
+            raise QueueError(f"Failed to connect to Redis: {e}") from e
 
     async def disconnect(self) -> None:
         """Close connection to Redis."""

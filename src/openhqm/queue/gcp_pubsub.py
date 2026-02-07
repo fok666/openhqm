@@ -72,10 +72,10 @@ class GCPPubSubQueue(MessageQueueInterface):
             raise QueueError(
                 "GCP Pub/Sub dependencies not installed. "
                 "Install with: pip install google-cloud-pubsub"
-            )
+            ) from None
         except Exception as e:
             logger.error("Failed to connect to GCP Pub/Sub", error=str(e))
-            raise QueueError(f"Failed to connect to GCP Pub/Sub: {e}")
+            raise QueueError(f"Failed to connect to GCP Pub/Sub: {e}") from e
 
     async def disconnect(self) -> None:
         """Close connection to GCP Pub/Sub."""
@@ -131,7 +131,7 @@ class GCPPubSubQueue(MessageQueueInterface):
 
         except Exception as e:
             logger.error("Failed to publish to Pub/Sub", error=str(e))
-            raise QueueError(f"Failed to publish to Pub/Sub: {e}")
+            raise QueueError(f"Failed to publish to Pub/Sub: {e}") from e
 
     async def consume(
         self,
@@ -192,7 +192,7 @@ class GCPPubSubQueue(MessageQueueInterface):
 
         except Exception as e:
             logger.error("Error consuming from Pub/Sub", error=str(e))
-            raise QueueError(f"Error consuming from Pub/Sub: {e}")
+            raise QueueError(f"Error consuming from Pub/Sub: {e}") from e
 
     async def _handle_message(self, handler, queue_message, pubsub_message):
         """Handle message processing and acknowledgment."""
