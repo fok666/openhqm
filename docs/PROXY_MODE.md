@@ -21,12 +21,23 @@ OpenHQM can operate as an **asynchronous reverse proxy**, allowing you to config
 
 ## Architecture
 
-```
-Client → OpenHQM API → Request Queue → Workers → Backend Endpoints
-                                         ↓
-                      Response Queue ← Results
-                            ↓
-                      Client polls for response
+```mermaid
+flowchart LR
+    Client[Client]
+    API[OpenHQM API]
+    ReqQueue[Request Queue]
+    Workers[Workers]
+    Backend[Backend Endpoints]
+    RespQueue[Response Queue]
+    Poll[Client polls for response]
+    
+    Client --> API
+    API --> ReqQueue
+    ReqQueue --> Workers
+    Workers --> Backend
+    Backend -.-> Results
+    Results --> RespQueue
+    RespQueue --> Poll
 ```
 
 ### Request Flow

@@ -33,50 +33,61 @@ You have a legacy application that:
 
 ### Architecture
 
-```
-┌─────────────────────────────────────────────┐
-│              Your Pod                       │
-│                                             │
-│  ┌─────────────┐        ┌───────────────┐  │
-│  │  OpenHQM    │  HTTP  │  Your Legacy  │  │
-│  │  Sidecar    │───────>│  Application  │  │
-│  │             │        │  (unchanged!) │  │
-│  └──────┬──────┘        └───────────────┘  │
-└─────────┼───────────────────────────────────┘
-          │
-          │ Queue Messages
-          ▼
-┌─────────────────────────────────────────────┐
-│         Worker Deployment                   │
-│     (Scales independently!)                 │
-│                                             │
-│  ┌────────┐  ┌────────┐  ┌────────┐        │
-│  │Worker 1│  │Worker 2│  │Worker N│ ...    │
-│  └───┬────┘  └───┬────┘  └───┬────┘        │
-└──────┴───────────┴───────────┴─────────────┘
-          │                                    
-          │ Call Your App's API                
-          ▼                                    
-   ┌──────────────────┐                       
-   │  Your App        │                       
-   │  Service         │                       
-   └──────────────────┘                       
+```mermaid
+flowchart TD
+    subgraph Pod["Your Pod"]
+        Sidecar["OpenHQM Sidecar"]
+        App["Your Legacy<br/>Application<br/>(unchanged!)"]
+        Sidecar -->|HTTP| App
+    end
+    
+    Queue[Queue Messages]
+    
+    subgraph Workers["Worker Deployment<br/>(Scales independently!)"]
+        W1[Worker 1]
+        W2[Worker 2]
+        WN[Worker N]
+    end
+    
+    Service["Your App<br/>Service"]
+    
+    Pod --> Queue
+    Queue --> W1 & W2 & WN
+    W1 & W2 & WN -->|Call Your App's API| Service
 ```
 
 ### Request Flow
 
 **Before (Synchronous):**
-```
-Client → Load Balancer → Your App (blocks, times out, crashes under load)
+
+```mermaid
+flowchart LR
+    Client[Client]
+    LB[Load Balancer]
+    App["Your App<br/>(blocks, times out,<br/>crashes under load)"]
+    
+    Client --> LB
+    LB --> App
 ```
 
 **After (Asynchronous with OpenHQM):**
-```
-Client → Load Balancer → OpenHQM Sidecar → Queue
-                            ↓
-                      Returns immediately
-                      
-Queue → Workers (scale 1-100+) → Your App (protected, stable load)
+
+```mermaid
+flowchart TD
+    Client[Client]
+    LB[Load Balancer]
+    Sidecar[OpenHQM Sidecar]
+    Queue[Queue]
+    Return["Returns immediately"]
+    Workers["Workers (scale 1-100+)"]
+    App["Your App<br/>(protected, stable load)"]
+    
+    Client --> LB
+    LB --> Sidecar
+    Sidecar --> Queue
+    Sidecar -.->|Response| Return
+    Queue --> Workers
+    Workers --> App
 ```
 
 ## Deployment
@@ -152,28 +163,31 @@ spec:
 ### E-Commerce Order Processing
 
 **Before OpenHQM:**
-```
-Black Friday Traffic:
-┌─────────┐
-│10,000   │ → Orders
-│requests/│    │
-│second   │    ├─→ 100 req/s ✅ Processed
-└─────────┘    │
-               └─→ 9,900 req/s ❌ Errors/Timeouts
+
+```mermaid
+flowchart TD
+    Traffic["Black Friday Traffic<br/>10,000 requests/second"]
+    Orders[Orders]
+    Success["100 req/s ✅<br/>Processed"]
+    Fail["9,900 req/s ❌<br/>Errors/Timeouts"]
+    
+    Traffic --> Orders
+    Orders --> Success
+    Orders --> Fail
 ```
 
 **After OpenHQM Sidecar:**
-```
-Black Friday Traffic:
-┌─────────┐
-│10,000   │ → OpenHQM Queue
-│requests/│    │
-│second   │    ├─→ All accepted immediately ✅
-└─────────┘    │
-               ├─→ Workers scale to 100
-               │
-               └─→ Process at 100 req/s
-                   Queue drains over time
+
+```mermaid
+flowchart TD
+    Traffic["Black Friday Traffic<br/>10,000 requests/second"]
+    Queue["OpenHQM Queue<br/>All accepted immediately ✅"]
+    Workers["Workers scale to 100"]
+    Process["Process at 100 req/s<br/>Queue drains over time"]
+    
+    Traffic --> Queue
+    Queue --> Workers
+    Workers --> Process
 ```
 
 ### Result:

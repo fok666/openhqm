@@ -4,29 +4,16 @@
 
 Traditional message queue pattern for microservices.
 
-```
-┌──────────────┐
-│   Client     │
-└──────┬───────┘
-       │ HTTP
-       ▼
-┌─────────────────────┐
-│  OpenHQM API        │
-│  (Port 8000)        │
-└──────┬──────────────┘
-       │
-       │ Redis/Kafka/SQS
-       ▼
-┌─────────────────────┐
-│  Worker Pool        │
-│  (Scales 1-100+)    │
-└──────┬──────────────┘
-       │
-       │ Process
-       ▼
-┌─────────────────────┐
-│  Response Cache     │
-└─────────────────────┘
+```mermaid
+flowchart TD
+    Client[Client]
+    API["OpenHQM API<br/>(Port 8000)"]
+    Workers["Worker Pool<br/>(Scales 1-100+)"]
+    Cache[Response Cache]
+    
+    Client -->|HTTP| API
+    API -->|Redis/Kafka/SQS| Workers
+    Workers -->|Process| Cache
 ```
 
 ## Pattern 2: Kubernetes Sidecar (Envoy-Style)
@@ -69,72 +56,81 @@ Traditional message queue pattern for microservices.
 ### Why This is Powerful
 
 **Before OpenHQM:**
-```
-Client → Load Balancer → Legacy App (synchronous)
-                         └─> Can't scale under load
-                         └─> No queue/buffer
-                         └─> Tightly coupled
+
+```mermaid
+flowchart LR
+    Client[Client]
+    LB[Load Balancer]
+    App["Legacy App (synchronous)<br/>• Can't scale under load<br/>• No queue/buffer<br/>• Tightly coupled"]
+    
+    Client --> LB
+    LB --> App
 ```
 
 **After OpenHQM (Sidecar):**
-```
-Client → Load Balancer → OpenHQM Sidecar → Legacy App
-                              │
-                              ├─> Queue buffers requests
-                              ├─> Workers scale independently
-                              ├─> Legacy app unchanged
-                              └─> Zero code modifications
+
+```mermaid
+flowchart LR
+    Client[Client]
+    LB[Load Balancer]
+    Sidecar["OpenHQM Sidecar<br/>• Queue buffers requests<br/>• Workers scale independently<br/>• Legacy app unchanged<br/>• Zero code modifications"]
+    App[Legacy App]
+    
+    Client --> LB
+    LB --> Sidecar
+    Sidecar --> App
 ```
 
 ## Pattern 3: Multi-Region with Sidecar
 
-```
-Region US-EAST-1                    Region EU-WEST-1
-┌──────────────────────┐           ┌──────────────────────┐
-│  ┌────┐  ┌────────┐  │           │  ┌────┐  ┌────────┐  │
-│  │HQM │→ │Legacy  │  │           │  │HQM │→ │Legacy  │  │
-│  │Side│  │App     │  │           │  │Side│  │App     │  │
-│  └─┬──┘  └────────┘  │           │  └─┬──┘  └────────┘  │
-│    │                 │           │    │                 │
-└────┼─────────────────┘           └────┼─────────────────┘
-     │                                  │
-     └──────────┬───────────────────────┘
-                │
-          ┌─────▼─────┐
-          │  Central  │
-          │   Queue   │
-          │  (Kafka)  │
-          └─────┬─────┘
-                │
-     ┌──────────┴───────────┐
-     │                      │
-┌────▼────┐           ┌────▼────┐
-│ Workers │           │ Workers │
-│  US     │           │  EU     │
-└─────────┘           └─────────┘
+```mermaid
+flowchart TD
+    subgraph US["Region US-EAST-1"]
+        HQMUS["HQM Sidecar"]
+        AppUS["Legacy App"]
+        HQMUS --> AppUS
+    end
+    
+    subgraph EU["Region EU-WEST-1"]
+        HQMEU["HQM Sidecar"]
+        AppEU["Legacy App"]
+        HQMEU --> AppEU
+    end
+    
+    Queue["Central Queue<br/>(Kafka)"]
+    
+    subgraph WorkersUS["Workers US"]
+        WUS1[Worker]
+        WUS2[Worker]
+    end
+    
+    subgraph WorkersEU["Workers EU"]
+        WEU1[Worker]
+        WEU2[Worker]
+    end
+    
+    HQMUS & HQMEU --> Queue
+    Queue --> WorkersUS & WorkersEU
 ```
 
 ## Pattern 4: Hybrid (Some Async, Some Sync)
 
-```
-┌──────────┐
-│  Client  │
-└────┬─────┘
-     │
-     ├────────────────┬────────────────┐
-     │                │                │
-     ▼                ▼                ▼
-┌─────────┐    ┌──────────┐    ┌──────────┐
-│ Direct  │    │ OpenHQM  │    │ OpenHQM  │
-│ Sync    │    │ Sidecar  │    │ Sidecar  │
-│ Path    │    │ (Async)  │    │ (Async)  │
-└────┬────┘    └────┬─────┘    └────┬─────┘
-     │              │                │
-     ▼              ▼                ▼
-┌─────────┐    ┌─────────┐    ┌─────────┐
-│ Fast    │    │ Slow    │    │ Batch   │
-│ API     │    │ API     │    │ API     │
-└─────────┘    └─────────┘    └─────────┘
+```mermaid
+flowchart TD
+    Client[Client]
+    
+    Sync["Direct Sync Path"]
+    Sidecar1["OpenHQM Sidecar<br/>(Async)"]
+    Sidecar2["OpenHQM Sidecar<br/>(Async)"]
+    
+    FastAPI[Fast API]
+    SlowAPI[Slow API]
+    BatchAPI[Batch API]
+    
+    Client --> Sync & Sidecar1 & Sidecar2
+    Sync --> FastAPI
+    Sidecar1 --> SlowAPI
+    Sidecar2 --> BatchAPI
 ```
 
 **Use Case:** Keep critical low-latency paths synchronous, queue heavy operations.
@@ -160,23 +156,20 @@ Peak (6pm-9pm):       20-50 workers
 
 ### Per-Endpoint Scaling
 
-```
-┌──────────────────┐
-│  OpenHQM API     │
-└────────┬─────────┘
-         │
-    ┌────┴────┬──────────┐
-    │         │          │
-    ▼         ▼          ▼
-┌────────┐ ┌────────┐ ┌────────┐
-│Queue A │ │Queue B │ │Queue C │
-│(Fast)  │ │(Slow)  │ │(Batch) │
-└───┬────┘ └───┬────┘ └───┬────┘
-    │          │          │
-    ▼          ▼          ▼
-┌────────┐ ┌────────┐ ┌────────┐
-│2 workers│ │10 work│ │50 work│
-└────────┘ └────────┘ └────────┘
+```mermaid
+flowchart TD
+    API[OpenHQM API]
+    QA["Queue A<br/>(Fast)"]
+    QB["Queue B<br/>(Slow)"]
+    QC["Queue C<br/>(Batch)"]
+    WA[2 workers]
+    WB[10 workers]
+    WC[50 workers]
+    
+    API --> QA & QB & QC
+    QA --> WA
+    QB --> WB
+    QC --> WC
 ```
 
 ## Migration Path

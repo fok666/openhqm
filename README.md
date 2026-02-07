@@ -3,10 +3,11 @@
 [![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![CI](https://github.com/yourusername/openhqm/workflows/CI/badge.svg)](https://github.com/yourusername/openhqm/actions)
+[![Multi-Arch](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-blue)](docs/MULTI_ARCH_BUILD.md)
 
 **OpenHQM** is an asynchronous HTTP request processing system that decouples request handling from response delivery using message queues. Deploy it as a **Kubernetes sidecar** to add async queue capabilities to legacy HTTP workloads **without changing code**, or use it as a standalone microservice for async processing.
 
-> **💡 New: Sidecar/Envoy Pattern** - Add async processing to ANY HTTP application with zero code changes! Deploy OpenHQM as a K8s sidecar to modernize legacy apps, decouple scaling, and protect backends from traffic spikes. See [SIDECAR_REVOLUTION.md](SIDECAR_REVOLUTION.md) for details.
+> **💡 New: Sidecar/Envoy Pattern** - Add async processing to ANY HTTP application with zero code changes! Deploy OpenHQM as a K8s sidecar to modernize legacy apps, decouple scaling, and protect backends from traffic spikes. See [docs/SIDECAR_REVOLUTION.md](docs/SIDECAR_REVOLUTION.md) for details.
 
 ## 🚀 Features
 
@@ -16,6 +17,8 @@
 - **Flexible Authentication**: Support for Bearer, API Key, Basic, and custom authentication
 - **Transparent Header Forwarding**: Pass headers from client to backend seamlessly
 - **7 Queue Backends + Custom**: Redis Streams, Kafka, AWS SQS, Azure Event Hubs, GCP Pub/Sub, MQTT, plus bring-your-own handler
+- **Multi-Architecture Support**: Docker images for AMD64 and ARM64 (Intel, AMD, AWS Graviton, Apple Silicon)
+- **8 Optimized Image Variants**: Queue-specific images 40-64% smaller than full build
 - **Scalable Worker Pool**: Horizontally scalable workers for processing requests
 - **Correlation Tracking**: Built-in request/response correlation with UUIDs
 - **High Availability**: Fault-tolerant design with retry logic and dead letter queues
@@ -23,19 +26,31 @@
 - **Monitoring & Metrics**: Prometheus metrics and structured logging
 - **Production Ready**: Docker support, health checks, and CI/CD pipelines
 
+## 📚 Documentation
+
+- **[Getting Started](docs/QUICKSTART.md)** - 5-minute quickstart guide
+- **[Architecture & Design](SDD.md)** - Software Design Document
+- **[Complete Documentation Index](docs/README.md)** - All documentation organized by topic
+
+### Key Guides
+
+- **[Composable Patterns](docs/COMPOSABLE_PATTERNS.md)** - HTTP→Queue and Queue→HTTP patterns
+- **[Queue Backends](docs/QUEUE_BACKENDS.md)** - Guide for all 7 queue backends
+- **[Kubernetes Sidecar](docs/KUBERNETES_SIDECAR.md)** - Deploy as K8s sidecar
+- **[Proxy Mode](docs/PROXY_MODE.md)** - Reverse proxy configuration
+- **[Docker Images](docs/DOCKER_IMAGES.md)** - Image variants and usage
+- **[Multi-Arch Builds](docs/MULTI_ARCH_BUILD.md)** - Build for AMD64 & ARM64
+- **[Quick Reference](docs/QUICK_REFERENCE.md)** - Command cheat sheet
+
 ## 📋 Table of Contents
 
 - [Composable Patterns](#composable-patterns)
 - [Architecture](#architecture)
-- [Kubernetes Sidecar Pattern](#kubernetes-sidecar-pattern)
-- [Reverse Proxy Mode](#reverse-proxy-mode)
 - [Queue Backends](#queue-backends)
 - [Quick Start](#quick-start)
-- [Installation](#installation)
+- [Docker Images](#docker-images)
 - [Configuration](#configuration)
 - [API Usage](#api-usage)
-- [Development](#development)
-- [Testing](#testing)
 - [Deployment](#deployment)
 - [Contributing](#contributing)
 - [License](#license)
@@ -45,109 +60,79 @@
 OpenHQM implements **two fundamental patterns** that can be used independently or together:
 
 ### 1️⃣ HTTP → Queue (Ingress)
-Accept HTTP requests and queue them for processing.
-- **Use when**: You need to accept HTTP requests and process them asynchronously with custom logic
-- **Example**: Image processing, ETL pipelines, notification services
+Accept HTTP requests and queue them for processing with custom logic.
 
 ### 2️⃣ Queue → HTTP (Egress)
 Consume messages from a queue and forward to HTTP endpoints.
-- **Use when**: You need to consume from a queue (Kafka/Redis) and POST to REST APIs
-- **Example**: Kafka-to-REST bridge, webhook relay, rate-limited API client
 
 ### 3️⃣ HTTP → Queue → HTTP (Combined)
 Use both patterns together for full async reverse proxy capabilities.
-- **Use when**: You need async proxy with load shedding, sidecar pattern, or API gateway with queueing
-- **Example**: Kubernetes sidecar, legacy app modernization, traffic spike protection
 
-**The power is in composition!** Use Pattern 1 alone, Pattern 2 alone, or combine them for maximum flexibility.
+**The power is in composition!** Mix and match patterns for your use case.
 
-See **[COMPOSABLE_PATTERNS.md](COMPOSABLE_PATTERNS.md)** for detailed explanation, use cases, and configuration examples.
+📖 **See [docs/COMPOSABLE_PATTERNS.md](docs/COMPOSABLE_PATTERNS.md) for detailed patterns, use cases, and configuration.**
 
 ## 🏗️ Architecture
 
 OpenHQM follows a queue-based asynchronous processing pattern:
 
-```
-Client → HTTP Listener → Request Queue → Workers → Response Queue → HTTP Listener → Client
+```mermaid
+flowchart LR
+    Client --> HTTPListener[HTTP Listener]
+    HTTPListener --> RequestQueue[Request Queue]
+    RequestQueue --> Workers
+    Workers --> ResponseQueue[Response Queue]
+    ResponseQueue --> HTTPListener
+    HTTPListener --> Client
 ```
 
 ### Components
 
 1. **HTTP Listener** (FastAPI): Accepts requests, generates correlation IDs, manages responses
-2. **Message Queues**: Decouples request submission from processing (Redis/Kafka/SQS)
+2. **Message Queues**: Decouples request submission from processing (7 backends supported)
 3. **Worker Pool**: Processes messages asynchronously with configurable concurrency
 4. **Response Handler**: Matches responses to requests and delivers results
 
-For detailed architecture information, see [SDD.md](SDD.md).
+📖 **For detailed architecture, see [SDD.md](SDD.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
 
 ## 🎯 Kubernetes Sidecar Pattern
 
-OpenHQM can be deployed as a **Kubernetes sidecar container** to modernize legacy HTTP-only applications without code changes:
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-spec:
-  template:
-    spec:
-      containers:
-      # OpenHQM sidecar - adds async queue capability
-      - name: openhqm-sidecar
-        image: openhqm:latest
-        env:
-        - name: OPENHQM_PROXY__ENABLED
-          value: "true"
-        - name: OPENHQM_PROXY__DEFAULT_ENDPOINT
-          value: "http://localhost:8080"  # Legacy app in same pod
-      
-      # Legacy application - unchanged
-      - name: legacy-app
-        image: legacy-app:v1.0
-        ports:
-        - containerPort: 8080
-```
+OpenHQM can be deployed as a **Kubernetes sidecar container** to modernize legacy HTTP-only applications without code changes. Add async processing, load shedding, and independent scaling to any application.
 
 **Benefits:**
 - ✅ **Zero code changes** to legacy applications
 - ✅ **Independent scaling** - scale workers separately from app pods
 - ✅ **Load shedding** - queue absorbs traffic spikes
 - ✅ **Gradual migration** - modernize incrementally
-- ✅ **Cost optimization** - scale workers to zero during off-peak
 
-**Use Cases:**
-- Add async processing to synchronous REST APIs
-- Protect legacy backends from traffic spikes  
-- Decouple scaling of ingress, workers, and application
-- Modernize monoliths without rewrites
-
-See **[KUBERNETES_SIDECAR.md](KUBERNETES_SIDECAR.md)** for complete Kubernetes deployment patterns.
+📖 **See [docs/KUBERNETES_SIDECAR.md](docs/KUBERNETES_SIDECAR.md) and [docs/SIDECAR_REVOLUTION.md](docs/SIDECAR_REVOLUTION.md) for complete guide.**
 
 ## 🔄 Reverse Proxy Mode
 
-OpenHQM can function as an **asynchronous reverse proxy**, forwarding requests to configured backend endpoints with full transparency. This mode enables:
+OpenHQM functions as an **asynchronous reverse proxy**, forwarding requests to backend endpoints with full transparency:
 
-- **Multiple Backend Endpoints**: Route requests to different services/APIs
-- **Authentication Management**: Centrally manage auth tokens for backends
-- **Header Forwarding**: Transparently pass headers between client and backend
-- **Response Caching**: Cache backend responses with correlation tracking
-- **Load Distribution**: Queue and distribute requests across worker pools
+- Multiple backend endpoints with routing
+- Authentication management (Bearer, API Key, Basic, Custom)
+- Transparent header forwarding
+- Response caching with correlation tracking
 
-### Quick Example
+📖 **See [docs/PROXY_MODE.md](docs/PROXY_MODE.md) for complete configuration guide.**
 
-```yaml
-proxy:
-  enabled: true
-  endpoints:
-    my-api:
-      url: "https://api.example.com/v1/process"
-      auth_type: "bearer"
-      auth_token: "${API_TOKEN}"
-```
+## 🔌 Queue Backends
 
-Submit a request:
-```bash
-curl -X POST http://localhost:8000/api/v1/submit \
-  -H "Content-Type: application/json" \
+OpenHQM supports **7 queue backends + custom handlers**:
+
+| Backend | Use Case | Latency | Throughput |
+|---------|----------|---------|------------|
+| **Redis Streams** | Development, low latency | < 5ms | 100k+ msg/s |
+| **Apache Kafka** | High throughput, streaming | 5-10ms | Millions/s |
+| **AWS SQS** | Cloud-managed, serverless | 20-50ms | Thousands/s |
+| **Azure Event Hubs** | Azure-native, Kafka-compatible | 10-30ms | Millions/s |
+| **GCP Pub/Sub** | GCP-native, global scale | 20-100ms | Millions/s |
+| **MQTT** | IoT, edge computing | < 10ms | Varies |
+| **Custom** | Bring your own handler | Varies | Varies |
+
+📖 **See [docs/QUEUE_BACKENDS.md](docs/QUEUE_BACKENDS.md) for complete configuration guide.**
   -d '{
     "payload": {"data": "hello"},
     "headers": {"X-Custom": "value"},
@@ -155,69 +140,113 @@ curl -X POST http://localhost:8000/api/v1/submit \
   }'
 ```
 
-See **[PROXY_MODE.md](PROXY_MODE.md)** for comprehensive proxy configuration guide.
+📖 **See [docs/QUEUE_BACKENDS.md](docs/QUEUE_BACKENDS.md) for complete configuration guide.**
 
-## ⚡ Quick Start
+## 🚀 Quick Start
 
-### Using Docker Compose
+### Using Docker (Recommended)
 
 ```bash
-# Clone the repository
+# Pull optimized image for your queue backend
+docker pull ghcr.io/yourusername/openhqm:latest-redis
+
+# Or build locally
+./scripts/build-multiarch.sh --backend redis
+
+# Run with Docker Compose
+docker-compose up
+```
+
+### Local Development
+
+```bash
+# Clone and setup
 git clone https://github.com/yourusername/openhqm.git
 cd openhqm
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 
-# Start all services (API, Workers, Redis)
-docker-compose up -d
+# Run services
+python -m openhqm.api.listener  # Terminal 1
+python -m openhqm.worker.worker  # Terminal 2
+```
 
-# Check service health
-curl http://localhost:8000/health
+### Test It
 
+```bash
 # Submit a request
 curl -X POST http://localhost:8000/api/v1/submit \
   -H "Content-Type: application/json" \
   -d '{"payload": {"operation": "echo", "data": "Hello World"}}'
 
-# Get the response (use correlation_id from previous response)
+# Get the response (use correlation_id from response)
 curl http://localhost:8000/api/v1/response/{correlation_id}
 ```
 
-## 📦 Installation
+📖 **See [docs/QUICKSTART.md](docs/QUICKSTART.md) for detailed setup guide.**
 
-### Prerequisites
+## 🐳 Docker Images
 
-- Python 3.11 or higher
-- Redis 6.0+ (or Kafka/SQS)
-- pip or poetry
-
-### Local Development
+OpenHQM provides **8 optimized image variants** with multi-architecture support (AMD64 & ARM64):
 
 ```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Install development dependencies
-pip install -r requirements-dev.txt
-
-# Set up configuration
-cp config.example.yaml config.yaml
-# Edit config.yaml with your settings
-
-# Run the HTTP listener
-python -m openhqm.api.listener
-
-# In another terminal, run workers
-python -m openhqm.worker.worker
+# Queue-specific images (40-64% smaller)
+docker pull openhqm:latest-redis    # Redis only
+docker pull openhqm:latest-sqs      # AWS SQS only
+docker pull openhqm:latest-kafka    # Kafka only
+docker pull openhqm:latest-azure    # Azure Event Hubs only
+docker pull openhqm:latest-gcp      # GCP Pub/Sub only
+docker pull openhqm:latest-mqtt     # MQTT only
+docker pull openhqm:latest-minimal  # No queue deps
+docker pull openhqm:latest          # All backends
 ```
+
+**Build locally:**
+```bash
+# Build for your architecture
+./scripts/build-multiarch.sh --backend redis
+
+# Build for both AMD64 and ARM64
+./scripts/build-multiarch.sh --backend redis --platforms linux/amd64,linux/arm64
+
+# Build all variants
+./scripts/build-multiarch.sh --build-all
+```
+
+📖 **See [docs/DOCKER_IMAGES.md](docs/DOCKER_IMAGES.md) and [docs/MULTI_ARCH_BUILD.md](docs/MULTI_ARCH_BUILD.md) for details.**
 
 ## ⚙️ Configuration
 
-OpenHQM uses YAML configuration files and environment variables.
+OpenHQM uses YAML configuration files and environment variables:
 
-### config.yaml
+```yaml
+queue:
+  type: "redis"  # redis, kafka, sqs, azure_eventhubs, gcp_pubsub, mqtt, custom
+  redis:
+    url: "redis://localhost:6379"
+  
+proxy:
+  enabled: true  # Enable reverse proxy mode
+  default_endpoint: "http://localhost:8080"
+  
+worker:
+  count: 5
+  timeout_seconds: 300
+```
+
+Environment variables:
+```bash
+OPENHQM_QUEUE__TYPE=redis
+OPENHQM_QUEUE__REDIS_URL=redis://localhost:6379
+OPENHQM_PROXY__ENABLED=true
+```
+
+📖 **See [docs/QUEUE_BACKENDS.md](docs/QUEUE_BACKENDS.md) for complete configuration reference.**
+
+## 📡 API Usage
+
+### Submit Request
 
 ```yaml
 server:
@@ -381,16 +410,28 @@ locust -f tests/load/locustfile.py
 
 ### Docker
 
+OpenHQM provides **8 optimized image variants** for different queue backends, with support for **linux/amd64** and **linux/arm64** architectures.
+
 ```bash
-# Build image
-docker build -t openhqm:latest .
+# Pull optimized image for your queue backend
+docker pull ghcr.io/yourusername/openhqm:latest-redis  # Redis only
+docker pull ghcr.io/yourusername/openhqm:latest-sqs    # AWS SQS only
+docker pull ghcr.io/yourusername/openhqm:latest        # All backends
+
+# Or build locally (auto-detects architecture)
+docker build --build-arg QUEUE_BACKEND=redis -t openhqm:redis .
+
+# Build for multiple architectures
+./scripts/build-multiarch.sh --backend redis
 
 # Run HTTP listener
-docker run -p 8000:8000 openhqm:latest listener
+docker run -p 8000:8000 openhqm:latest
 
 # Run workers
 docker run openhqm:latest worker
 ```
+
+**See [docs/DOCKER_IMAGES.md](docs/DOCKER_IMAGES.md) for image variants and [docs/MULTI_ARCH_BUILD.md](docs/MULTI_ARCH_BUILD.md) for multi-architecture builds.**
 
 ### Kubernetes
 
@@ -405,6 +446,8 @@ kubectl get pods -n openhqm
 kubectl logs -f deployment/openhqm-api -n openhqm
 ```
 
+**See [docs/KUBERNETES_SIDECAR.md](docs/KUBERNETES_SIDECAR.md) and [docs/DEPLOYMENT_PATTERNS.md](docs/DEPLOYMENT_PATTERNS.md) for deployment guides.**
+
 ### Docker Compose
 
 ```bash
@@ -413,6 +456,57 @@ docker-compose up -d
 
 # Scale workers
 docker-compose up -d --scale worker=10
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+## 📊 Monitoring
+
+- **Prometheus Metrics**: `/metrics` endpoint
+- **Health Checks**: `/health` endpoint
+- **Structured Logging**: JSON logs with correlation IDs
+- **Queue Depth Monitoring**: Worker autoscaling based on queue metrics
+
+## 🤝 Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+### Quick Start for Contributors
+
+```bash
+# Fork and clone
+git clone https://github.com/yourusername/openhqm.git
+cd openhqm
+
+# Install dev dependencies
+pip install -r requirements-dev.txt
+
+# Run tests
+pytest
+
+# Submit PR
+```
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## 🔗 Links
+
+- **Documentation**: [docs/README.md](docs/README.md)
+- **Software Design**: [SDD.md](SDD.md)
+- **Contributing**: [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Changelog**: [CHANGELOG.md](CHANGELOG.md)
+- **Issues**: [GitHub Issues](https://github.com/yourusername/openhqm/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/openhqm/discussions)
+
+---
+
+**OpenHQM** - Modernize any HTTP application with async queue processing. Deploy as a sidecar, standalone service, or reverse proxy. Zero code changes required. 🚀
 
 # View logs
 docker-compose logs -f

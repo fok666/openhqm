@@ -64,47 +64,21 @@ See [COMPOSABLE_PATTERNS.md](COMPOSABLE_PATTERNS.md) for detailed patterns, use 
 
 ### 3.1 High-Level Architecture
 
-```
-┌─────────────┐
-│   Client    │
-└──────┬──────┘
-       │ HTTP Request
-       ▼
-┌─────────────────────────────────┐
-│     HTTP Listener (FastAPI)     │
-│  - Accept requests              │
-│  - Generate correlation ID      │
-│  - Queue to request queue       │
-│  - Manage response tracking     │
-└────────┬────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────┐
-│      Request Queue              │
-│      (Kafka/SQS/Redis)          │
-└────────┬────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────┐
-│      Worker Pool                │
-│  - Consume from request queue   │
-│  - Process messages             │
-│  - Publish to response queue    │
-└────────┬────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────┐
-│      Response Queue             │
-│      (Kafka/SQS/Redis)          │
-└────────┬────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────┐
-│   Response Handler              │
-│  - Consume responses            │
-│  - Match correlation ID         │
-│  - Deliver to waiting client    │
-└─────────────────────────────────┘
+```mermaid
+flowchart TD
+    Client[Client]
+    HTTPListener["HTTP Listener (FastAPI)<br/>- Accept requests<br/>- Generate correlation ID<br/>- Queue to request queue<br/>- Manage response tracking"]
+    RequestQueue["Request Queue<br/>(Kafka/SQS/Redis)"]
+    WorkerPool["Worker Pool<br/>- Consume from request queue<br/>- Process messages<br/>- Publish to response queue"]
+    ResponseQueue["Response Queue<br/>(Kafka/SQS/Redis)"]
+    ResponseHandler["Response Handler<br/>- Consume responses<br/>- Match correlation ID<br/>- Deliver to waiting client"]
+    
+    Client -->|HTTP Request| HTTPListener
+    HTTPListener --> RequestQueue
+    RequestQueue --> WorkerPool
+    WorkerPool --> ResponseQueue
+    ResponseQueue --> ResponseHandler
+    ResponseHandler -->|Response| Client
 ```
 
 ### 3.2 Component Description
@@ -338,16 +312,29 @@ monitoring:
   - Production: Cloud-managed (SQS/Event Hubs/Pub/Sub) or Kafka
 - **Cache**: Redis
 - **Testing**: pytest, pytest-asyncio
+- **Containerization**: Docker with multi-architecture support (AMD64, ARM64)
 
 ### 6.2 Key Libraries
 - `fastapi`: Web framework
 - `uvicorn[standard]`: ASGI server
-- `redis`: Redis client with streams support
+- `redis`: Redis client with streams support (for Redis backend)
+- `aiokafka`: Async Kafka client (for Kafka backend)
+- `aioboto3`: Async AWS SDK (for SQS backend)
+- `azure-eventhub`: Azure Event Hubs client (for Azure backend)
+- `google-cloud-pubsub`: GCP Pub/Sub client (for GCP backend)
+- `asyncio-mqtt`: Async MQTT client (for MQTT backend)
 - `pydantic`: Data validation
 - `pydantic-settings`: Configuration management
 - `aiohttp`: Async HTTP client
 - `prometheus-client`: Metrics
 - `structlog`: Structured logging
+
+### 6.3 Multi-Architecture Support
+- **Platforms**: linux/amd64 (x86_64), linux/arm64 (aarch64)
+- **Build Tool**: Docker Buildx with multi-platform support
+- **Image Variants**: 8 optimized variants per architecture (all, redis, kafka, sqs, azure, gcp, mqtt, minimal)
+- **CI/CD**: GitHub Actions with matrix builds for parallel multi-arch compilation
+- **Size Optimization**: Queue-specific images reduce size by 40-64% vs full build
 
 ---
 
@@ -418,9 +405,48 @@ openhqm/
 ## 8. Deployment
 
 ### 8.1 Container Deployment
-- Docker images for HTTP listener and workers
+
+#### 8.1.1 Docker Images
+OpenHQM provides **8 optimized image variants** for different queue backends:
+- **openhqm:latest** (or `:latest-all`) - Full build with all backends (~500MB)
+- **openhqm:latest-redis** - Redis Streams only (~200MB, 60% smaller)
+- **openhqm:latest-kafka** - Apache Kafka only (~250MB, 50% smaller)
+- **openhqm:latest-sqs** - AWS SQS only (~230MB, 54% smaller)
+- **openhqm:latest-azure** - Azure Event Hubs only (~280MB, 44% smaller)
+- **openhqm:latest-gcp** - GCP Pub/Sub only (~270MB, 46% smaller)
+- **openhqm:latest-mqtt** - MQTT only (~210MB, 58% smaller)
+- **openhqm:latest-minimal** - No queue dependencies (~180MB, 64% smaller)
+
+#### 8.1.2 Multi-Architecture Support
+All image variants support multiple CPU architectures:
+- **linux/amd64** (x86_64) - Intel/AMD processors
+- **linux/arm64** (aarch64) - ARM processors, Apple Silicon
+
+Docker automatically selects the correct architecture for your platform.
+
+**Build locally:**
+```bash
+# Current architecture only (fast)
+./scripts/build-multiarch.sh --backend redis --platforms linux/$(uname -m)
+
+# Both architectures
+./scripts/build-multiarch.sh --backend redis
+
+# All variants
+./scripts/build-multiarch.sh --build-all
+```
+
+**See [docs/DOCKER_IMAGES.md](docs/DOCKER_IMAGES.md) and [docs/MULTI_ARCH_BUILD.md](docs/MULTI_ARCH_BUILD.md) for details.**
+
+#### 8.1.3 Local Development
 - Docker Compose for local development
-- Kubernetes for production
+- Hot reload with volume mounts
+- Local Redis/Kafka containers
+
+#### 8.1.4 Production Deployment
+- Kubernetes for production orchestration
+- Multi-architecture support for cost optimization (AWS Graviton, Azure Ampere, GCP Tau)
+- Horizontal pod autoscaling based on queue depth
 
 ### 8.2 Environment Configuration
 - Environment variables for sensitive data
@@ -493,6 +519,8 @@ Response (200 OK):
 4. **Request Chaining**: Link dependent requests
 5. **Admin Dashboard**: Monitor queue health and metrics
 6. **Multi-tenancy**: Isolated queues per tenant
+7. **Additional Architectures**: Support for linux/386, linux/ppc64le, linux/s390x
+8. **Platform-Specific Optimizations**: Architecture-specific performance tuning
 
 ---
 
@@ -510,35 +538,26 @@ OpenHQM can be deployed as a **Kubernetes sidecar container** to add queue-based
 
 ### 11.2 Architecture
 
-```
-┌─────────────────────────────────────────────────┐
-│                    Pod                          │
-│                                                 │
-│  ┌──────────────┐         ┌─────────────────┐  │
-│  │   OpenHQM    │ ───────>│ Legacy App      │  │
-│  │   Sidecar    │ HTTP    │ (HTTP only)     │  │
-│  │ (Port 8000)  │<────────│ (Port 8080)     │  │
-│  └──────┬───────┘         └─────────────────┘  │
-│         │                                       │
-└─────────┼───────────────────────────────────────┘
-          │
-          │ Queue (Redis/Kafka/SQS)
-          ▼
-┌─────────────────────────────────────────────────┐
-│           Worker Deployment                     │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
-│  │ Worker 1 │  │ Worker 2 │  │ Worker N │      │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘      │
-│       │             │             │             │
-│       └─────────────┴─────────────┘             │
-│                     │                           │
-└─────────────────────┼───────────────────────────┘
-                      │
-                      ▼
-              ┌──────────────┐
-              │  Legacy App  │
-              │   Service    │
-              └──────────────┘
+```mermaid
+flowchart TD
+    subgraph Pod["Kubernetes Pod"]
+        Sidecar["OpenHQM Sidecar<br/>(Port 8000)"]
+        Legacy["Legacy App<br/>(HTTP only)<br/>(Port 8080)"]
+        Sidecar <-->|HTTP| Legacy
+    end
+    
+    subgraph Workers["Worker Deployment"]
+        W1[Worker 1]
+        W2[Worker 2]
+        WN[Worker N]
+    end
+    
+    Service["Legacy App Service"]
+    Queue[("Queue<br/>Redis/Kafka/SQS")]
+    
+    Sidecar <-->|Publish/Consume| Queue
+    Queue <--> Workers
+    Workers -->|Process| Service
 ```
 
 ### 11.3 Use Cases
@@ -701,8 +720,22 @@ proxy:
 - Redis Streams: https://redis.io/docs/data-types/streams/
 - Kafka Documentation: https://kafka.apache.org/documentation/
 - AWS SQS: https://docs.aws.amazon.com/sqs/
-- OpenHQM Composable Patterns: COMPOSABLE_PATTERNS.md
+- Docker Buildx: https://docs.docker.com/buildx/
+- Multi-platform Images: https://docs.docker.com/build/building/multi-platform/
 
-### 12.3 Change Log
+### 12.3 Internal Documentation
+- **Architecture & Patterns**: [docs/COMPOSABLE_PATTERNS.md](docs/COMPOSABLE_PATTERNS.md)
+- **Queue Backends**: [docs/QUEUE_BACKENDS.md](docs/QUEUE_BACKENDS.md)
+- **Kubernetes Sidecar**: [docs/KUBERNETES_SIDECAR.md](docs/KUBERNETES_SIDECAR.md)
+- **Proxy Mode**: [docs/PROXY_MODE.md](docs/PROXY_MODE.md)
+- **Docker Images**: [docs/DOCKER_IMAGES.md](docs/DOCKER_IMAGES.md)
+- **Multi-Arch Builds**: [docs/MULTI_ARCH_BUILD.md](docs/MULTI_ARCH_BUILD.md)
+- **Quick Reference**: [docs/QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md)
+- **Complete Index**: [docs/README.md](docs/README.md)
+
+### 12.4 Change Log
 - 2026-02-07: Initial version 1.0
 - 2026-02-07: Added Section 2 - Composable Patterns (HTTP→Queue, Queue→HTTP)
+- 2026-02-07: Added Section 6.3 - Multi-Architecture Support
+- 2026-02-07: Enhanced Section 8 - Container Deployment with multi-arch details
+- 2026-02-07: Reorganized documentation into docs/ folder

@@ -17,25 +17,14 @@ These patterns are **orthogonal** - you can use either one alone, or combine the
 Accept HTTP requests from clients and queue them for asynchronous processing.
 
 ### Architecture
-```
-┌─────────┐
-│ Client  │
-└────┬────┘
-     │ HTTP POST
-     ▼
-┌─────────────────┐
-│  HTTP Listener  │
-│  (Port 8000)    │
-│  • Accept req   │
-│  • Generate ID  │
-│  • Queue msg    │
-└────┬────────────┘
-     │
-     ▼
-┌─────────────────┐
-│  Request Queue  │
-│  (Redis/Kafka)  │
-└─────────────────┘
+```mermaid
+flowchart TD
+    Client[Client]
+    Listener["HTTP Listener<br/>(Port 8000)<br/>• Accept req<br/>• Generate ID<br/>• Queue msg"]
+    Queue["Request Queue<br/>(Redis/Kafka)"]
+    
+    Client -->|HTTP POST| Listener
+    Listener --> Queue
 ```
 
 ### When to Use Alone
@@ -93,28 +82,14 @@ class MessageProcessor:
 Consume messages from a queue and forward them as HTTP requests to backend endpoints.
 
 ### Architecture
-```
-┌─────────────────┐
-│  Request Queue  │
-│  (Redis/Kafka)  │
-│  • Fed by       │
-│    external     │
-│    systems      │
-└────┬────────────┘
-     │
-     ▼
-┌─────────────────┐
-│     Workers     │
-│  • Consume msg  │
-│  • Add auth     │
-│  • HTTP POST    │
-└────┬────────────┘
-     │ HTTP
-     ▼
-┌─────────────────┐
-│ Backend Service │
-│ (Port 8080)     │
-└─────────────────┘
+```mermaid
+flowchart TD
+    Queue["Request Queue<br/>(Redis/Kafka)<br/>• Fed by external systems"]
+    Workers["Workers<br/>• Consume msg<br/>• Add auth<br/>• HTTP POST"]
+    Backend["Backend Service<br/>(Port 8080)"]
+    
+    Queue --> Workers
+    Workers -->|HTTP| Backend
 ```
 
 ### When to Use Alone
@@ -172,39 +147,18 @@ proxy:
 Accept HTTP requests, queue them, and forward to backend endpoints asynchronously.
 
 ### Architecture
-```
-┌─────────┐
-│ Client  │
-└────┬────┘
-     │ HTTP POST
-     ▼
-┌─────────────────┐
-│  HTTP Listener  │
-│  (Port 8000)    │
-│  • Accept req   │
-│  • Generate ID  │
-│  • Queue msg    │
-└────┬────────────┘
-     │
-     ▼
-┌─────────────────┐
-│  Request Queue  │
-│  (Redis/Kafka)  │
-└────┬────────────┘
-     │
-     ▼
-┌─────────────────┐
-│     Workers     │
-│  • Consume msg  │
-│  • Add auth     │
-│  • HTTP POST    │
-└────┬────────────┘
-     │ HTTP
-     ▼
-┌─────────────────┐
-│ Backend Service │
-│ (Port 8080)     │
-└─────────────────┘
+```mermaid
+flowchart TD
+    Client[Client]
+    Listener["HTTP Listener<br/>(Port 8000)<br/>• Accept req<br/>• Generate ID<br/>• Queue msg"]
+    Queue["Request Queue<br/>(Redis/Kafka)"]
+    Workers["Workers<br/>• Consume msg<br/>• Add auth<br/>• HTTP POST"]
+    Backend["Backend Service<br/>(Port 8080)"]
+    
+    Client -->|HTTP POST| Listener
+    Listener --> Queue
+    Queue --> Workers
+    Workers -->|HTTP| Backend
 ```
 
 ### When to Use Combined
@@ -400,32 +354,27 @@ spec:
 
 You can deploy OpenHQM multiple times with different patterns:
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    Service Mesh                              │
-│                                                              │
-│  ┌────────────────────────────────────────────────────┐     │
-│  │  Service A: HTTP → Queue (custom processing)      │     │
-│  │  • Accept user uploads                             │     │
-│  │  • Queue for processing                            │     │
-│  │  • Workers run image processing                    │     │
-│  └────────────────────────────────────────────────────┘     │
-│                                                              │
-│  ┌────────────────────────────────────────────────────┐     │
-│  │  Service B: Queue → HTTP (Kafka consumer)         │     │
-│  │  • Consume from Kafka topic                        │     │
-│  │  • Forward to external API                         │     │
-│  │  • Handle authentication                           │     │
-│  └────────────────────────────────────────────────────┘     │
-│                                                              │
-│  ┌────────────────────────────────────────────────────┐     │
-│  │  Service C: HTTP → Queue → HTTP (sidecar)         │     │
-│  │  • Sidecar for legacy app                          │     │
-│  │  • Accept HTTP, queue, forward                     │     │
-│  │  • Zero code changes to app                        │     │
-│  └────────────────────────────────────────────────────┘     │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Mesh["Service Mesh"]
+        subgraph ServiceA["Service A: HTTP → Queue (custom processing)"]
+            A1["• Accept user uploads"]
+            A2["• Queue for processing"]
+            A3["• Workers run image processing"]
+        end
+        
+        subgraph ServiceB["Service B: Queue → HTTP (Kafka consumer)"]
+            B1["• Consume from Kafka topic"]
+            B2["• Forward to external API"]
+            B3["• Handle authentication"]
+        end
+        
+        subgraph ServiceC["Service C: HTTP → Queue → HTTP (sidecar)"]
+            C1["• Sidecar for legacy app"]
+            C2["• Accept HTTP, queue, forward"]
+            C3["• Zero code changes to app"]
+        end
+    end
 ```
 
 ---

@@ -6,41 +6,28 @@ Deploy OpenHQM as a **sidecar container** alongside legacy HTTP-only application
 
 ## Architecture Pattern
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Application Pod                          │
-│                                                             │
-│  ┌──────────────────┐              ┌──────────────────┐    │
-│  │  OpenHQM Sidecar │              │   Legacy App     │    │
-│  │                  │              │                  │    │
-│  │  :8000 (public)  │────HTTP─────>│  :8080 (local)   │    │
-│  │                  │              │                  │    │
-│  └────────┬─────────┘              └──────────────────┘    │
-│           │                                                 │
-└───────────┼─────────────────────────────────────────────────┘
-            │
-            │ Message Queue
-            │ (Redis/Kafka/SQS)
-            │
-            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Worker Deployment                        │
-│                                                             │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌─────────┐ │
-│  │ Worker 1 │   │ Worker 2 │   │ Worker 3 │   │ Worker N│ │
-│  │          │   │          │   │          │   │         │ │
-│  └────┬─────┘   └────┬─────┘   └────┬─────┘   └────┬────┘ │
-│       │              │              │              │       │
-│       └──────────────┴──────────────┴──────────────┘       │
-│                              │                              │
-└──────────────────────────────┼──────────────────────────────┘
-                               │
-                               │ HTTP Calls
-                               ▼
-                    ┌────────────────────┐
-                    │  Legacy App Service│
-                    │  (ClusterIP)       │
-                    └────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Pod["Application Pod"]
+        Sidecar["OpenHQM Sidecar<br/>:8000 (public)"]
+        App["Legacy App<br/>:8080 (local)"]
+        Sidecar -->|HTTP| App
+    end
+    
+    Queue[Message Queue<br/>Redis/Kafka/SQS]
+    
+    subgraph Workers["Worker Deployment"]
+        W1[Worker 1]
+        W2[Worker 2]
+        W3[Worker 3]
+        WN[Worker N]
+    end
+    
+    Service["Legacy App Service<br/>(ClusterIP)"]
+    
+    Pod --> Queue
+    Queue --> W1 & W2 & W3 & WN
+    W1 & W2 & W3 & WN -->|HTTP Calls| Service
 ```
 
 ## Key Benefits
