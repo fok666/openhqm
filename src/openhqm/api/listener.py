@@ -19,15 +19,27 @@ def main():
         port=settings.server.port,
     )
 
-    app = create_app()
-
-    uvicorn.run(
-        app,
-        host=settings.server.host,
-        port=settings.server.port,
-        workers=settings.server.workers,
-        log_config=None,  # Use our logging configuration
-    )
+    # Use import string for uvicorn when workers > 1 (required by uvicorn)
+    # Use app object when workers = 1 (development mode)
+    if settings.server.workers > 1:
+        # Import string required for multi-worker mode
+        uvicorn.run(
+            "openhqm.api.app:create_app",
+            factory=True,
+            host=settings.server.host,
+            port=settings.server.port,
+            workers=settings.server.workers,
+            log_config=None,  # Use our logging configuration
+        )
+    else:
+        # Direct app object for single-worker mode (development)
+        app = create_app()
+        uvicorn.run(
+            app,
+            host=settings.server.host,
+            port=settings.server.port,
+            log_config=None,  # Use our logging configuration
+        )
 
 
 if __name__ == "__main__":
