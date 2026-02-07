@@ -124,13 +124,18 @@ jobs:
 
   build:
     name: Build Docker Images
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     needs: [lint, test]
     permissions:
       contents: read
       actions: read
     strategy:
       matrix:
+        arch:
+          - name: amd64
+            platform: linux/amd64
+          - name: arm64
+            platform: linux/arm64
         queue_backend:
           - name: all
             tag_suffix: ""
@@ -172,38 +177,39 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: ${{ matrix.arch.platform }}
           build-args: |
             QUEUE_BACKEND=${{ matrix.queue_backend.name }}
           push: false
           tags: |
-            openhqm:${{ github.sha }}${{ matrix.queue_backend.tag_suffix }}
-            openhqm:latest${{ matrix.queue_backend.tag_suffix }}
+            openhqm:${{ github.sha }}${{ matrix.queue_backend.tag_suffix }}-${{ matrix.arch.name }}
+            openhqm:latest${{ matrix.queue_backend.tag_suffix }}-${{ matrix.arch.name }}
           labels: |
             org.opencontainers.image.title=OpenHQM${{ matrix.queue_backend.tag_suffix }}
             org.opencontainers.image.description=${{ matrix.queue_backend.description }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.meta.outputs.date }}
             queue.backend=${{ matrix.queue_backend.name }}
-          cache-from: type=gha,scope=${{ matrix.queue_backend.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.queue_backend.name }}
+            arch=${{ matrix.arch.name }}
+          cache-from: type=gha,scope=${{ matrix.queue_backend.name }}-${{ matrix.arch.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.queue_backend.name }}-${{ matrix.arch.name }}
 
       - name: Analyze image size
         run: |
-          docker images openhqm:latest${{ matrix.queue_backend.tag_suffix }} --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
+          docker images openhqm:latest${{ matrix.queue_backend.tag_suffix }}-${{ matrix.arch.name }} --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
 
       - name: Export image info
         run: |
-          docker images openhqm:latest${{ matrix.queue_backend.tag_suffix }} --format "{{.Size}}" > image-size-${{ matrix.queue_backend.name }}.txt
+          docker images openhqm:latest${{ matrix.queue_backend.tag_suffix }}-${{ matrix.arch.name }} --format "{{.Size}}" > image-size-${{ matrix.queue_backend.name }}-${{ matrix.arch.name }}.txt
 
       - name: Upload image size artifact
         uses: actions/upload-artifact@v6
         with:
-          name: image-size-${{ matrix.queue_backend.name }}
-          path: image-size-${{ matrix.queue_backend.name }}.txt
+          name: image-size-${{ matrix.queue_backend.name }}-${{ matrix.arch.name }}
+          path: image-size-${{ matrix.queue_backend.name }}-${{ matrix.arch.name }}.txt
 
   integration-test:
     name: Integration Tests
-    # use ubuntu-latest for x64 builds and ubuntu-24.04-arm for arm64 builds
     runs-on: ubuntu-latest
     needs: [build]
     permissions:
@@ -273,8 +279,8 @@ jobs:
         run: |
           echo "# Docker Image Size Comparison" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Variant | Size | Use Case |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Variant | amd64 Size | arm64 Size | Use Case |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|------------|------------|----------|" >> $GITHUB_STEP_SUMMARY
           
           variants=(
             "all:All queue backends:Multi-cloud deployments"
@@ -289,14 +295,23 @@ jobs:
           
           for variant in "${variants[@]}"; do
             IFS=':' read -r name desc usecase <<< "$variant"
-            if [ -f "image-sizes/image-size-${name}.txt" ]; then
-              size=$(cat "image-sizes/image-size-${name}.txt")
-              echo "| \`openhqm:latest-${name}\` | ${size} | ${usecase} |" >> $GITHUB_STEP_SUMMARY
+            amd64_size="-"
+            arm64_size="-"
+            if [ -f "image-sizes/image-size-${name}-amd64.txt" ]; then
+              amd64_size=$(cat "image-sizes/image-size-${name}-amd64.txt")
             fi
+            if [ -f "image-sizes/image-size-${name}-arm64.txt" ]; then
+              arm64_size=$(cat "image-sizes/image-size-${name}-arm64.txt")
+            fi
+            echo "| \`openhqm:latest-${name}\` | ${amd64_size} | ${arm64_size} | ${usecase} |" >> $GITHUB_STEP_SUMMARY
           done
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "💡 **Tip:** Use queue-specific images for production to minimize image size and attack surface." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Multi-Architecture Support:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Images built on \`ubuntu-latest\` for **amd64** (x86_64)" >> $GITHUB_STEP_SUMMARY
+          echo "- Images built on \`ubuntu-24.04-arm\` for **arm64** (aarch64)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Example:**" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`yaml" >> $GITHUB_STEP_SUMMARY
