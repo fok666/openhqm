@@ -16,6 +16,9 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+permissions:
+  contents: read
+
 jobs:
   build-and-push:
     name: Build and Push Docker Images
@@ -23,6 +26,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: read
     strategy:
       matrix:
         queue_backend:
