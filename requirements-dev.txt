@@ -21,7 +21,7 @@ mkdocs==1.5.3
 mkdocs-material==9.5.3
 
 # Load testing
-locust==2.20.0
+locust==2.43.2
 
 # Type stubs
 types-redis==4.6.0.11
