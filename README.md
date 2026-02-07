@@ -475,15 +475,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Made with 🤖 for the async processing community**
-Bridges queues and https services
-
-HTTP(s) Endpoint -> request -> queue -> message -> worker -> response -> HTTP(s) Endpoint
-
-reciever queue
-response queue
-
-session handlig
-
-worker pool
-scaling
-
