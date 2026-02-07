@@ -1,0 +1,349 @@
+# Queue → HTTP Pattern
+# Use case: Consume messages from queue and forward to HTTP endpoints
+# Pattern: Queue fed by external systems, workers consume and POST to backend APIs
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openhqm-queue-to-http
+  labels:
+    app: openhqm
+    pattern: queue-to-http
+
+---
+# Redis for queue
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: openhqm-queue-to-http
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+  clusterIP: None
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: openhqm-queue-to-http
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        command:
+        - redis-server
+        - --appendonly
+        - "yes"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+
+---
+# Secret for backend API credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backend-api-credentials
+  namespace: openhqm-queue-to-http
+type: Opaque
+stringData:
+  api-token: "your-backend-api-token-here"
+  api-key: "your-backend-api-key-here"
+
+---
+# ConfigMap for OpenHQM configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openhqm-config
+  namespace: openhqm-queue-to-http
+data:
+  OPENHQM_QUEUE__TYPE: "redis"
+  OPENHQM_QUEUE__REDIS_URL: "redis://redis:6379"
+  OPENHQM_CACHE__TYPE: "redis"
+  OPENHQM_CACHE__REDIS_URL: "redis://redis:6379"
+  OPENHQM_PROXY__ENABLED: "true"  # Enable HTTP forwarding
+  OPENHQM_PROXY__DEFAULT_ENDPOINT: "backend-api"
+  OPENHQM_WORKER__COUNT: "10"
+  OPENHQM_WORKER__TIMEOUT_SECONDS: "300"
+  OPENHQM_MONITORING__LOG_LEVEL: "INFO"
+  # Proxy endpoint configuration (JSON format)
+  OPENHQM_PROXY__ENDPOINTS: |
+    {
+      "backend-api": {
+        "url": "https://api.example.com/v1/process",
+        "method": "POST",
+        "timeout": 300,
+        "auth_type": "bearer",
+        "auth_token": "${BACKEND_API_TOKEN}",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Client-ID": "openhqm"
+        }
+      },
+      "webhook-endpoint": {
+        "url": "https://webhooks.example.com/events",
+        "method": "POST",
+        "timeout": 60,
+        "auth_type": "api_key",
+        "auth_header": "X-API-Key",
+        "auth_token": "${BACKEND_API_KEY}"
+      }
+    }
+  OPENHQM_PROXY__FORWARD_HEADERS: "Content-Type,X-Request-ID,X-Correlation-ID"
+  OPENHQM_PROXY__RETRY_MAX_ATTEMPTS: "3"
+  OPENHQM_PROXY__RETRY_BACKOFF_SECONDS: "2"
+
+---
+# Worker Deployment (queue consumers)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openhqm-workers
+  namespace: openhqm-queue-to-http
+  labels:
+    app: openhqm
+    component: worker
+    pattern: queue-to-http
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: openhqm
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: openhqm
+        component: worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      containers:
+      - name: worker
+        image: openhqm:latest-redis
+        command: ["python", "-m", "openhqm.worker.worker"]
+        envFrom:
+        - configMapRef:
+            name: openhqm-config
+        env:
+        - name: BACKEND_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: backend-api-credentials
+              key: api-token
+        - name: BACKEND_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: backend-api-credentials
+              key: api-key
+        - name: WORKER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import sys; sys.exit(0)"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+---
+# HorizontalPodAutoscaler for workers
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: openhqm-workers-hpa
+  namespace: openhqm-queue-to-http
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: openhqm-workers
+  minReplicas: 5
+  maxReplicas: 50
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 5
+        periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Min
+
+---
+# NetworkPolicy - Workers to Redis and external APIs
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openhqm-network-policy
+  namespace: openhqm-queue-to-http
+spec:
+  podSelector:
+    matchLabels:
+      app: openhqm
+  policyTypes:
+  - Egress
+  egress:
+  # Allow Redis access
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow DNS
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  # Allow HTTPS to external APIs
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+
+---
+# PodDisruptionBudget for workers
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: openhqm-workers-pdb
+  namespace: openhqm-queue-to-http
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app: openhqm
+      component: worker
+
+---
+# ConfigMap for monitoring dashboards (optional)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openhqm-grafana-dashboard
+  namespace: openhqm-queue-to-http
+  labels:
+    grafana_dashboard: "1"
+data:
+  openhqm-queue-to-http.json: |
+    {
+      "dashboard": {
+        "title": "OpenHQM Queue→HTTP Pattern",
+        "panels": [
+          {
+            "title": "Messages Processed",
+            "targets": [
+              {
+                "expr": "rate(openhqm_messages_processed_total[5m])"
+              }
+            ]
+          },
+          {
+            "title": "HTTP Success Rate",
+            "targets": [
+              {
+                "expr": "rate(openhqm_http_requests_success_total[5m]) / rate(openhqm_http_requests_total[5m])"
+              }
+            ]
+          }
+        ]
+      }
+    }

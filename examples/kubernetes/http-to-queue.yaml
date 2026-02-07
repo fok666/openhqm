@@ -1,0 +1,321 @@
+# HTTP → Queue Pattern
+# Use case: Accept HTTP requests and queue them for async processing
+# Pattern: HTTP Listener accepts requests, queues to Redis/Kafka, workers process with custom logic
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openhqm-http-to-queue
+  labels:
+    app: openhqm
+    pattern: http-to-queue
+
+---
+# Redis for queue and cache
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: openhqm-http-to-queue
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+  clusterIP: None
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: openhqm-http-to-queue
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        command:
+        - redis-server
+        - --appendonly
+        - "yes"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+
+---
+# ConfigMap for OpenHQM configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openhqm-config
+  namespace: openhqm-http-to-queue
+data:
+  OPENHQM_SERVER__HOST: "0.0.0.0"
+  OPENHQM_SERVER__PORT: "8000"
+  OPENHQM_QUEUE__TYPE: "redis"
+  OPENHQM_QUEUE__REDIS_URL: "redis://redis:6379"
+  OPENHQM_CACHE__TYPE: "redis"
+  OPENHQM_CACHE__REDIS_URL: "redis://redis:6379"
+  OPENHQM_PROXY__ENABLED: "false"  # Custom processing, not HTTP forwarding
+  OPENHQM_WORKER__COUNT: "5"
+  OPENHQM_WORKER__TIMEOUT_SECONDS: "300"
+  OPENHQM_MONITORING__LOG_LEVEL: "INFO"
+
+---
+# HTTP API Service (public-facing)
+apiVersion: v1
+kind: Service
+metadata:
+  name: openhqm-api
+  namespace: openhqm-http-to-queue
+  labels:
+    app: openhqm
+    component: api
+spec:
+  type: LoadBalancer
+  selector:
+    app: openhqm
+    component: api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+
+---
+# HTTP API Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openhqm-api
+  namespace: openhqm-http-to-queue
+  labels:
+    app: openhqm
+    component: api
+    pattern: http-to-queue
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: openhqm
+      component: api
+  template:
+    metadata:
+      labels:
+        app: openhqm
+        component: api
+    spec:
+      containers:
+      - name: api
+        image: openhqm:latest-redis
+        command: ["python", "-m", "openhqm.api.listener"]
+        ports:
+        - containerPort: 8000
+          name: http
+        envFrom:
+        - configMapRef:
+            name: openhqm-config
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+
+---
+# Worker Deployment (scales independently)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openhqm-workers
+  namespace: openhqm-http-to-queue
+  labels:
+    app: openhqm
+    component: worker
+    pattern: http-to-queue
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: openhqm
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: openhqm
+        component: worker
+    spec:
+      containers:
+      - name: worker
+        image: openhqm:latest-redis
+        command: ["python", "-m", "openhqm.worker.worker"]
+        envFrom:
+        - configMapRef:
+            name: openhqm-config
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import sys; sys.exit(0)"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        env:
+        - name: WORKER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+
+---
+# HorizontalPodAutoscaler for workers based on CPU
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: openhqm-workers-hpa
+  namespace: openhqm-http-to-queue
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: openhqm-workers
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# NetworkPolicy - Allow traffic between components
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openhqm-network-policy
+  namespace: openhqm-http-to-queue
+spec:
+  podSelector:
+    matchLabels:
+      app: openhqm
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: openhqm
+  - from:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 53  # DNS
+    - protocol: UDP
+      port: 53  # DNS
+
+---
+# ServiceMonitor for Prometheus (if using Prometheus Operator)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: openhqm-metrics
+  namespace: openhqm-http-to-queue
+  labels:
+    app: openhqm
+spec:
+  selector:
+    matchLabels:
+      app: openhqm
+      component: api
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s

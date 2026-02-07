@@ -4,7 +4,7 @@ First off, thank you for considering contributing to OpenHQM! It's people like y
 
 ## Code of Conduct
 
-This project and everyone participating in it is governed by our Code of Conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to [team@openhqm.dev].
+This project and everyone participating in it is governed by our Code of Conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to [tbd].
 
 ## How Can I Contribute?
 
