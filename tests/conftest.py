@@ -18,7 +18,7 @@ def event_loop():
 
 
 @pytest.fixture
-async def redis_queue() -> AsyncGenerator[RedisQueue, None]:
+async def redis_queue() -> AsyncGenerator[RedisQueue]:
     """Create Redis queue for testing."""
     queue = RedisQueue(url="redis://localhost:6379")
     await queue.connect()
@@ -27,7 +27,7 @@ async def redis_queue() -> AsyncGenerator[RedisQueue, None]:
 
 
 @pytest.fixture
-async def redis_cache() -> AsyncGenerator[RedisCache, None]:
+async def redis_cache() -> AsyncGenerator[RedisCache]:
     """Create Redis cache for testing."""
     cache = RedisCache(url="redis://localhost:6379")
     await cache.connect()
