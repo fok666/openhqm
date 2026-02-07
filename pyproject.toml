@@ -123,6 +123,12 @@ module = [
     "redis.*",
     "prometheus_client.*",
     "structlog.*",
+    "azure.*",
+    "google.*",
+    "asyncio_mqtt.*",
+    "aiokafka.*",
+    "boto3.*",
+    "aioboto3.*",
 ]
 ignore_missing_imports = true
 
