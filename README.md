@@ -133,14 +133,6 @@ OpenHQM supports **7 queue backends + custom handlers**:
 | **Custom** | Bring your own handler | Varies | Varies |
 
 📖 **See [docs/QUEUE_BACKENDS.md](docs/QUEUE_BACKENDS.md) for complete configuration guide.**
-  -d '{
-    "payload": {"data": "hello"},
-    "headers": {"X-Custom": "value"},
-    "metadata": {"endpoint": "my-api"}
-  }'
-```
-
-📖 **See [docs/QUEUE_BACKENDS.md](docs/QUEUE_BACKENDS.md) for complete configuration guide.**
 
 ## 🚀 Quick Start
 
@@ -247,44 +239,6 @@ OPENHQM_PROXY__ENABLED=true
 ## 📡 API Usage
 
 ### Submit Request
-
-```yaml
-server:
-  host: "0.0.0.0"
-  port: 8000
-  workers: 4
-
-queue:
-  type: "redis"  # Options: redis, kafka, sqs
-  connection:
-    redis:
-      url: "redis://localhost:6379"
-
-worker:
-  count: 5
-  batch_size: 10
-  timeout_seconds: 300
-  max_retries: 3
-
-cache:
-  type: "redis"
-  ttl_seconds: 3600
-```
-
-### Environment Variables
-
-```bash
-OPENHQM_QUEUE_TYPE=redis
-OPENHQM_REDIS_URL=redis://localhost:6379
-OPENHQM_LOG_LEVEL=INFO
-OPENHQM_WORKER_COUNT=5
-```
-
-See [docs/configuration.md](docs/configuration.md) for all configuration options.
-
-## 🔌 API Usage
-
-### Submit a Request
 
 ```bash
 POST /api/v1/submit
@@ -507,65 +461,3 @@ MIT License - see [LICENSE](LICENSE) for details.
 ---
 
 **OpenHQM** - Modernize any HTTP application with async queue processing. Deploy as a sidecar, standalone service, or reverse proxy. Zero code changes required. 🚀
-
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
-```
-
-## 📊 Monitoring
-
-### Metrics
-
-Prometheus metrics available at `/metrics`:
-
-- `openhqm_requests_total`: Total requests received
-- `openhqm_requests_duration_seconds`: Request processing time
-- `openhqm_queue_depth`: Current queue depth
-- `openhqm_worker_active`: Active workers
-
-### Logging
-
-Structured JSON logs with correlation IDs for tracing:
-
-```json
-{
-  "timestamp": "2026-02-07T10:30:00Z",
-  "level": "INFO",
-  "correlation_id": "550e8400-e29b-41d4-a716-446655440000",
-  "message": "Request processed successfully",
-  "duration_ms": 1250
-}
-```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Built with [FastAPI](https://fastapi.tiangolo.com/)
-- Message queue support via Redis, Kafka, and AWS SQS
-- Inspired by modern async processing patterns
-
-## 📞 Support
-
-- Documentation: [docs/](docs/)
-- Issues: [GitHub Issues](https://github.com/yourusername/openhqm/issues)
-- Discussions: [GitHub Discussions](https://github.com/yourusername/openhqm/discussions)
-
----
-
-**Made with 🤖 for the async processing community**
