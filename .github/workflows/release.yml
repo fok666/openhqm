@@ -3,32 +3,31 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
-  release:
-    types: [published]
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Version tag (e.g., v1.0.0)'
-        required: true
+      - 'v*.*.*'
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 permissions:
-  contents: read
+  contents: write
+  packages: write
 
 jobs:
   build-and-push:
     name: Build and Push Docker Images
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch.name == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     permissions:
       contents: read
       packages: write
       actions: read
     strategy:
       matrix:
+        arch:
+          - name: amd64
+            platform: linux/amd64
+          - name: arm64
+            platform: linux/arm64
         queue_backend:
           - name: all
             tag_suffix: ""
@@ -68,48 +67,185 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "major=$(echo ${VERSION} | cut -d. -f1)" >> $GITHUB_OUTPUT
+          echo "minor=$(echo ${VERSION} | cut -d. -f1-2)" >> $GITHUB_OUTPUT
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          flavor: |
-            suffix=${{ matrix.queue_backend.tag_suffix }},onlatest=true
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha
+            type=semver,pattern={{version}},suffix=${{ matrix.queue_backend.tag_suffix }}-${{ matrix.arch.name }}
+            type=semver,pattern={{major}}.{{minor}},suffix=${{ matrix.queue_backend.tag_suffix }}-${{ matrix.arch.name }}
+            type=semver,pattern={{major}},suffix=${{ matrix.queue_backend.tag_suffix }}-${{ matrix.arch.name }}
           labels: |
             org.opencontainers.image.title=OpenHQM${{ matrix.queue_backend.tag_suffix }}
             org.opencontainers.image.description=${{ matrix.queue_backend.description }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
             queue.backend=${{ matrix.queue_backend.name }}
+            arch=${{ matrix.arch.name }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: ${{ matrix.arch.platform }}
           build-args: |
             QUEUE_BACKEND=${{ matrix.queue_backend.name }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.queue_backend.name }}-${{ matrix.arch.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.queue_backend.name }}-${{ matrix.arch.name }}
+
+  create-manifests:
+    name: Create Multi-Arch Manifests
+    runs-on: ubuntu-latest
+    needs: [build-and-push]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        queue_backend:
+          - name: all
+            tag_suffix: ""
+          - name: redis
+            tag_suffix: "-redis"
+          - name: kafka
+            tag_suffix: "-kafka"
+          - name: sqs
+            tag_suffix: "-sqs"
+          - name: azure
+            tag_suffix: "-azure"
+          - name: gcp
+            tag_suffix: "-gcp"
+          - name: mqtt
+            tag_suffix: "-mqtt"
+          - name: minimal
+            tag_suffix: "-minimal"
+    steps:
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "major=$(echo ${VERSION} | cut -d. -f1)" >> $GITHUB_OUTPUT
+          echo "minor=$(echo ${VERSION} | cut -d. -f1-2)" >> $GITHUB_OUTPUT
+
+      - name: Create and push multi-arch manifest (full version)
+        run: |
+          docker manifest create \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-arm64
+          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}
+
+      - name: Create and push multi-arch manifest (major.minor)
+        run: |
+          docker manifest create \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.minor }}${{ matrix.queue_backend.tag_suffix }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-arm64
+          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.minor }}${{ matrix.queue_backend.tag_suffix }}
+
+      - name: Create and push multi-arch manifest (major)
+        run: |
+          docker manifest create \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}${{ matrix.queue_backend.tag_suffix }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-arm64
+          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}${{ matrix.queue_backend.tag_suffix }}
+
+      - name: Create and push latest manifest
+        if: ${{ !contains(github.ref, '-') }}
+        run: |
+          docker manifest create \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest${{ matrix.queue_backend.tag_suffix }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-arm64
+          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest${{ matrix.queue_backend.tag_suffix }}
 
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [create-manifests]
     permissions:
       contents: write
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes with Docker images
+        id: release_notes
+        run: |
+          cat << 'EOF' > release_notes.md
+          ## 🐳 Docker Images
+          
+          Multi-architecture images available for **amd64** (x86_64) and **arm64** (aarch64):
+          
+          ### Full Build (All Queue Backends)
+          ```bash
+          docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+          docker pull ghcr.io/${{ github.repository }}:latest
+          ```
+          
+          ### Queue-Specific Images (Optimized Size)
+          
+          | Backend | Image | Size Reduction |
+          |---------|-------|----------------|
+          | Redis Streams | `ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}-redis` | ~60% smaller |
+          | Apache Kafka | `ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}-kafka` | ~50% smaller |
+          | AWS SQS | `ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}-sqs` | ~54% smaller |
+          | Azure Event Hubs | `ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}-azure` | ~44% smaller |
+          | GCP Pub/Sub | `ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}-gcp` | ~46% smaller |
+          | MQTT | `ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}-mqtt` | ~58% smaller |
+          | Minimal (Custom) | `ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}-minimal` | ~64% smaller |
+          
+          ### Architecture-Specific Images
+          
+          ```bash
+          # AMD64 (x86_64)
+          docker pull --platform linux/amd64 ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+          
+          # ARM64 (aarch64)
+          docker pull --platform linux/arm64 ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+          ```
+          
+          ### Version Tags
+          
+          Images are tagged with:
+          - Full version: `${{ steps.version.outputs.version }}`
+          - Minor version: Major.Minor
+          - Major version: Major
+          - Latest: `latest` (for stable releases only)
+          EOF
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          body_path: release_notes.md
           generate_release_notes: true
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}

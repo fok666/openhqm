@@ -108,16 +108,72 @@ make security
 
 ```bash
 git add .
-git commit -m "Add feature: description of your changes"
+git commit -m "feat: add new feature description"
 ```
 
-Use clear and meaningful commit messages. Follow conventional commits format:
-- `feat:` for new features
-- `fix:` for bug fixes
-- `docs:` for documentation changes
-- `test:` for adding tests
-- `refactor:` for code refactoring
-- `chore:` for maintenance tasks
+**Important:** Use [Conventional Commits](https://www.conventionalcommits.org/) format for all commit messages. This is required for automatic semantic versioning and changelog generation.
+
+### Commit Message Format
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+**Type** (required):
+- `feat:` - New features (triggers MINOR version bump)
+- `fix:` - Bug fixes (triggers PATCH version bump)
+- `docs:` - Documentation changes only
+- `style:` - Code style changes (formatting, no logic change)
+- `refactor:` - Code refactoring (no feature or bug fix)
+- `perf:` - Performance improvements
+- `test:` - Adding or updating tests
+- `build:` - Build system or dependency changes
+- `ci:` - CI/CD configuration changes
+- `chore:` - Other changes that don't modify src or test files
+
+**Scope** (optional): Component affected (e.g., api, queue, worker, cache)
+
+**Breaking Changes**: Add `BREAKING CHANGE:` in footer or `!` after type (triggers MAJOR version bump)
+
+### Examples
+
+```bash
+# Feature (minor version bump: 1.2.0 → 1.3.0)
+git commit -m "feat(api): add endpoint for batch request submission"
+
+# Bug fix (patch version bump: 1.2.0 → 1.2.1)
+git commit -m "fix(worker): resolve timeout handling in proxy mode"
+
+# Breaking change (major version bump: 1.2.0 → 2.0.0)
+git commit -m "feat(queue)!: change message format for better compatibility
+
+BREAKING CHANGE: Queue message format now requires 'version' field"
+
+# Documentation (no version bump)
+git commit -m "docs: update proxy mode configuration examples"
+
+# Multiple paragraphs
+git commit -m "fix(cache): prevent memory leak in connection pool
+
+Redis connections were not being properly released under high load.
+This change ensures all connections are returned to the pool.
+
+Closes #123"
+```
+
+### Commit Best Practices
+
+- Keep the subject line under 72 characters
+- Use imperative mood ("add" not "added" or "adds")
+- Don't end the subject line with a period
+- Separate subject from body with a blank line
+- Wrap the body at 72 characters
+- Use the body to explain what and why, not how
+- Reference issues and pull requests in the footer
 
 7. **Push to your fork**
 
@@ -272,11 +328,68 @@ make coverage
 
 ## Release Process
 
-1. Update version in `pyproject.toml` and `src/openhqm/__init__.py`
-2. Update CHANGELOG.md
-3. Create a git tag: `git tag -a v0.2.0 -m "Release v0.2.0"`
-4. Push tag: `git push origin v0.2.0`
-5. GitHub Actions will automatically build and release
+Releases are automated using [Python Semantic Release](https://python-semantic-release.readthedocs.io/).
+
+### Automatic Releases
+
+When commits are pushed to the `main` branch:
+1. Semantic Release analyzes commit messages
+2. Determines the next version based on commit types:
+   - `feat:` → MINOR version bump (1.2.0 → 1.3.0)
+   - `fix:` / `perf:` → PATCH version bump (1.2.0 → 1.2.1)
+   - `BREAKING CHANGE:` or `!` → MAJOR version bump (1.2.0 → 2.0.0)
+3. Updates version in `pyproject.toml` and `__init__.py`
+4. Generates CHANGELOG.md from commit messages
+5. Creates a Git tag (e.g., `v1.3.0`)
+6. Creates a GitHub Release with release notes
+7. Triggers Docker image build and push to registry
+
+### Manual Release Preparation
+
+If you need to prepare a release manually:
+
+```bash
+# Install semantic-release
+pip install python-semantic-release
+
+# Preview what the next version will be
+semantic-release version --print
+
+# Create a release (updates files and creates tag)
+semantic-release version
+
+# Push the release
+git push --follow-tags origin main
+```
+
+### Pre-releases
+
+To create pre-release versions (e.g., release candidates):
+
+1. Use the `develop` branch
+2. Commits will create pre-release versions: `1.3.0-rc.1`, `1.3.0-rc.2`, etc.
+3. Merge to `main` to create the stable release
+
+### Version Branches
+
+- `main` - Stable releases (e.g., `1.2.0`, `1.3.0`)
+- `develop` - Pre-releases (e.g., `1.3.0-rc.1`)
+
+### Docker Images
+
+Released versions automatically build and push Docker images:
+- Full version tag: `ghcr.io/owner/repo:1.2.3`
+- Minor version tag: `ghcr.io/owner/repo:1.2`
+- Major version tag: `ghcr.io/owner/repo:1`
+- Latest tag: `ghcr.io/owner/repo:latest`
+- Queue-specific variants: `-redis`, `-kafka`, `-sqs`, etc.
+- Architecture-specific: `-amd64`, `-arm64`
+
+All images are multi-architecture (amd64 and arm64).
+
+### Changelog
+
+The CHANGELOG.md is automatically generated from commit messages. Structure your commits properly to ensure accurate changelogs!
 
 ## Getting Help
 

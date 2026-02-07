@@ -16,6 +16,9 @@ black==24.3.0
 bandit==1.7.6
 safety==3.2.11
 
+# Release management
+python-semantic-release==9.14.0
+
 # Documentation
 mkdocs==1.5.3
 mkdocs-material==9.5.3
