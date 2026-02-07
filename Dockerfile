@@ -56,6 +56,11 @@ LABEL org.opencontainers.image.title="OpenHQM" \
 
 WORKDIR /app
 
+# Install runtime dependencies (curl for healthchecks)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # Create non-root user
 RUN useradd -m -u 1000 openhqm && \
     chown -R openhqm:openhqm /app
@@ -76,7 +81,7 @@ USER openhqm
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD python -c "import httpx; httpx.get('http://localhost:8000/health')" || exit 1
+    CMD curl -f http://localhost:8000/health || exit 1
 
 # Default command (can be overridden)
 CMD ["python", "-m", "openhqm.api.listener"]

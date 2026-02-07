@@ -395,6 +395,7 @@ When creating new files:
 - Keep functions small and focused (< 50 lines)
 - Use type hints everywhere
 - Document why, not what (code should be self-explanatory)
+- Skip comprehensive summarie creation
 
 ## Quick Reference
 
