@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # Redis service
+  redis:
+    image: redis:7-alpine
+    container_name: openhqm-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - openhqm
+
+  # API service
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openhqm-api
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENHQM_QUEUE__REDIS_URL=redis://redis:6379
+      - OPENHQM_CACHE__REDIS_URL=redis://redis:6379
+      - OPENHQM_MONITORING__LOG_LEVEL=INFO
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: python -m openhqm.api.listener
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - openhqm
+    restart: unless-stopped
+
+  # Worker service
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - OPENHQM_QUEUE__REDIS_URL=redis://redis:6379
+      - OPENHQM_CACHE__REDIS_URL=redis://redis:6379
+      - OPENHQM_MONITORING__LOG_LEVEL=INFO
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    command: python -m openhqm.worker.worker worker-${WORKER_ID:-1}
+    deploy:
+      replicas: 3
+    networks:
+      - openhqm
+    restart: unless-stopped
+
+networks:
+  openhqm:
+    driver: bridge
+
+volumes:
+  redis_data:

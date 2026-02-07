@@ -1,0 +1,2 @@
+# Redis Streams queue backend
+redis>=4.5.0

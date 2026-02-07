@@ -1,0 +1,102 @@
+# OpenHQM Configuration Example (YAML)
+# This demonstrates how to configure OpenHQM in proxy/reverse-proxy mode
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+
+queue:
+  type: redis
+  redis_url: "redis://localhost:6379"
+  request_queue_name: "openhqm-requests"
+  response_queue_name: "openhqm-responses"
+  dlq_name: "openhqm-dlq"
+
+worker:
+  count: 5
+  batch_size: 10
+  timeout_seconds: 300
+  max_retries: 3
+  retry_delay_base: 1.0
+  retry_delay_max: 60.0
+
+# Proxy Configuration - Transform OpenHQM into a reverse proxy
+proxy:
+  enabled: true
+  default_endpoint: "my-primary-api"  # Name of the default endpoint
+  max_response_size: 10485760  # 10MB
+  
+  # Headers to forward from client to backend
+  forward_headers:
+    - "Content-Type"
+    - "Accept"
+    - "User-Agent"
+    - "Authorization"
+    - "X-Request-ID"
+  
+  # Headers to strip before forwarding
+  strip_headers:
+    - "Host"
+    - "Connection"
+    - "Transfer-Encoding"
+  
+  # Named endpoint configurations
+  endpoints:
+    # Primary API with Bearer token authentication
+    my-primary-api:
+      url: "https://api.example.com/v1/process"
+      method: "POST"
+      timeout: 300
+      auth_type: "bearer"
+      auth_token: "${API_TOKEN}"  # Use environment variable
+      headers:
+        X-Service: "openhqm"
+    
+    # Secondary API with API Key authentication
+    analytics-api:
+      url: "https://analytics.example.com/events"
+      method: "POST"
+      timeout: 120
+      auth_type: "api_key"
+      auth_header_name: "X-API-Key"
+      auth_token: "${ANALYTICS_API_KEY}"
+    
+    # Third-party service with Basic auth
+    legacy-service:
+      url: "https://legacy.example.com/api/process"
+      method: "POST"
+      timeout: 600
+      auth_type: "basic"
+      auth_username: "${LEGACY_USER}"
+      auth_password: "${LEGACY_PASS}"
+      headers:
+        X-Client: "openhqm-proxy"
+    
+    # Public API (no authentication)
+    public-api:
+      url: "https://public-api.example.com/process"
+      method: "POST"
+      timeout: 180
+      headers:
+        X-Source: "openhqm"
+    
+    # Custom authentication header
+    custom-auth-api:
+      url: "https://custom.example.com/api"
+      method: "POST"
+      timeout: 300
+      auth_type: "custom"
+      auth_header_name: "X-Custom-Auth-Token"
+      auth_token: "${CUSTOM_TOKEN}"
+
+cache:
+  type: redis
+  redis_url: "redis://localhost:6379"
+  ttl_seconds: 3600
+  max_connections: 10
+
+monitoring:
+  metrics_enabled: true
+  log_level: "INFO"
+  log_format: "json"

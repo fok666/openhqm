@@ -1,0 +1,194 @@
+# Queue Backend Configuration Examples
+
+# =============================================================================
+# 1. REDIS STREAMS (Development/Low Latency)
+# =============================================================================
+queue:
+  type: redis
+  redis_url: "redis://localhost:6379/0"
+  request_queue_name: "openhqm-requests"
+  response_queue_name: "openhqm-responses"
+  dlq_name: "openhqm-dlq"
+
+# Environment variables
+# OPENHQM_QUEUE__TYPE=redis
+# OPENHQM_QUEUE__REDIS_URL=redis://redis:6379/0
+
+# =============================================================================
+# 2. APACHE KAFKA (High Throughput/Event Streaming)
+# =============================================================================
+queue:
+  type: kafka
+  kafka_bootstrap_servers: "kafka1:9092,kafka2:9092,kafka3:9092"
+  kafka_consumer_group: "openhqm-workers"
+  kafka_topics:
+    - "openhqm-requests"
+    - "openhqm-responses"
+  request_queue_name: "openhqm-requests"  # Topic name
+  response_queue_name: "openhqm-responses"
+
+# Environment variables
+# OPENHQM_QUEUE__TYPE=kafka
+# OPENHQM_QUEUE__KAFKA_BOOTSTRAP_SERVERS=kafka1:9092,kafka2:9092
+# OPENHQM_QUEUE__KAFKA_CONSUMER_GROUP=openhqm-workers
+# OPENHQM_QUEUE__KAFKA_TOPICS='["openhqm-requests", "openhqm-responses"]'
+
+# =============================================================================
+# 3. AWS SQS (Serverless/AWS Ecosystem)
+# =============================================================================
+queue:
+  type: sqs
+  sqs_region: "us-east-1"
+  sqs_queue_url: "https://sqs.us-east-1.amazonaws.com/123456789/openhqm-requests"
+  request_queue_name: "openhqm-requests"
+  response_queue_name: "openhqm-responses"
+  dlq_name: "openhqm-dlq"
+
+# Environment variables
+# OPENHQM_QUEUE__TYPE=sqs
+# OPENHQM_QUEUE__SQS_REGION=us-east-1
+# OPENHQM_QUEUE__SQS_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/123456789/openhqm-requests
+# AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+# AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+# =============================================================================
+# 4. AZURE EVENT HUBS (Azure Ecosystem/Kafka Compatible)
+# =============================================================================
+queue:
+  type: azure_eventhubs
+  azure_eventhubs_connection_string: "Endpoint=sb://openhqm.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=..."
+  azure_eventhubs_name: "openhqm"
+  azure_eventhubs_consumer_group: "$Default"
+  azure_eventhubs_checkpoint_store: "DefaultEndpointsProtocol=https;AccountName=openhqmstorage;AccountKey=...;EndpointSuffix=core.windows.net"
+
+# Environment variables
+# OPENHQM_QUEUE__TYPE=azure_eventhubs
+# OPENHQM_QUEUE__AZURE_EVENTHUBS_CONNECTION_STRING="Endpoint=sb://..."
+# OPENHQM_QUEUE__AZURE_EVENTHUBS_NAME=openhqm
+# OPENHQM_QUEUE__AZURE_EVENTHUBS_CONSUMER_GROUP=$Default
+# OPENHQM_QUEUE__AZURE_EVENTHUBS_CHECKPOINT_STORE="DefaultEndpointsProtocol=https;..."
+
+# =============================================================================
+# 5. GCP PUB/SUB (GCP Ecosystem/Global Scale)
+# =============================================================================
+queue:
+  type: gcp_pubsub
+  gcp_project_id: "my-gcp-project-id"
+  gcp_credentials_path: "/path/to/service-account.json"
+  gcp_max_messages: 10
+  request_queue_name: "openhqm-requests"  # Topic name
+  response_queue_name: "openhqm-responses"
+
+# Environment variables
+# OPENHQM_QUEUE__TYPE=gcp_pubsub
+# OPENHQM_QUEUE__GCP_PROJECT_ID=my-gcp-project-id
+# OPENHQM_QUEUE__GCP_CREDENTIALS_PATH=/path/to/service-account.json
+# OPENHQM_QUEUE__GCP_MAX_MESSAGES=10
+# GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+
+# =============================================================================
+# 6. MQTT (IoT/Edge Computing)
+# =============================================================================
+queue:
+  type: mqtt
+  mqtt_broker_host: "mqtt.example.com"
+  mqtt_broker_port: 1883
+  mqtt_username: "openhqm"
+  mqtt_password: "secret"
+  mqtt_qos: 1  # 0, 1, or 2
+  mqtt_client_id: "openhqm-worker-1"
+  request_queue_name: "openhqm/requests"  # MQTT topic
+  response_queue_name: "openhqm/responses"
+
+# Environment variables
+# OPENHQM_QUEUE__TYPE=mqtt
+# OPENHQM_QUEUE__MQTT_BROKER_HOST=mqtt.example.com
+# OPENHQM_QUEUE__MQTT_BROKER_PORT=1883
+# OPENHQM_QUEUE__MQTT_USERNAME=openhqm
+# OPENHQM_QUEUE__MQTT_PASSWORD=secret
+# OPENHQM_QUEUE__MQTT_QOS=1
+# OPENHQM_QUEUE__MQTT_CLIENT_ID=openhqm-worker-1
+
+# =============================================================================
+# 7. CUSTOM HANDLER (Bring Your Own Queue)
+# =============================================================================
+queue:
+  type: custom
+  custom_module: "mycompany.queues.custom_handler"
+  custom_class: "MyCustomQueue"
+  custom_config:
+    connection_string: "myqueue://localhost:5672"
+    option1: "value1"
+    option2: "value2"
+    max_connections: 10
+
+# Environment variables
+# OPENHQM_QUEUE__TYPE=custom
+# OPENHQM_QUEUE__CUSTOM_MODULE=mycompany.queues.custom_handler
+# OPENHQM_QUEUE__CUSTOM_CLASS=MyCustomQueue
+# OPENHQM_QUEUE__CUSTOM_CONFIG='{"connection_string": "myqueue://...", "option1": "value1"}'
+
+# =============================================================================
+# MULTI-ENVIRONMENT EXAMPLE
+# =============================================================================
+
+# Development
+---
+queue:
+  type: redis
+  redis_url: "redis://localhost:6379"
+
+# Staging
+---
+queue:
+  type: kafka
+  kafka_bootstrap_servers: "kafka-staging:9092"
+  kafka_consumer_group: "openhqm-staging"
+
+# Production
+---
+queue:
+  type: sqs
+  sqs_region: "us-east-1"
+  sqs_queue_url: "https://sqs.us-east-1.amazonaws.com/123456789/openhqm-prod-requests"
+
+# =============================================================================
+# DOCKER COMPOSE EXAMPLES
+# =============================================================================
+
+# Redis
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+  
+  openhqm:
+    environment:
+      OPENHQM_QUEUE__TYPE: redis
+      OPENHQM_QUEUE__REDIS_URL: redis://redis:6379
+
+# Kafka
+services:
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+  
+  openhqm:
+    environment:
+      OPENHQM_QUEUE__TYPE: kafka
+      OPENHQM_QUEUE__KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+# MQTT
+services:
+  mqtt:
+    image: eclipse-mosquitto:latest
+    ports:
+      - "1883:1883"
+  
+  openhqm:
+    environment:
+      OPENHQM_QUEUE__TYPE: mqtt
+      OPENHQM_QUEUE__MQTT_BROKER_HOST: mqtt
+      OPENHQM_QUEUE__MQTT_BROKER_PORT: 1883

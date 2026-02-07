@@ -1,0 +1,7 @@
+# All queue backends (full build)
+-r requirements-queue-redis.txt
+-r requirements-queue-kafka.txt
+-r requirements-queue-sqs.txt
+-r requirements-queue-azure.txt
+-r requirements-queue-gcp.txt
+-r requirements-queue-mqtt.txt

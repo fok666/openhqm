@@ -1,0 +1,2 @@
+# Apache Kafka queue backend
+aiokafka>=0.8.0

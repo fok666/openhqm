@@ -1,0 +1,34 @@
+"""Test configuration and fixtures."""
+
+import pytest
+import asyncio
+from typing import AsyncGenerator
+
+from openhqm.queue.redis_queue import RedisQueue
+from openhqm.cache.redis_cache import RedisCache
+
+
+@pytest.fixture(scope="session")
+def event_loop():
+    """Create event loop for async tests."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
+
+
+@pytest.fixture
+async def redis_queue() -> AsyncGenerator[RedisQueue, None]:
+    """Create Redis queue for testing."""
+    queue = RedisQueue(url="redis://localhost:6379")
+    await queue.connect()
+    yield queue
+    await queue.disconnect()
+
+
+@pytest.fixture
+async def redis_cache() -> AsyncGenerator[RedisCache, None]:
+    """Create Redis cache for testing."""
+    cache = RedisCache(url="redis://localhost:6379")
+    await cache.connect()
+    yield cache
+    await cache.close()

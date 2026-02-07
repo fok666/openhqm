@@ -1,0 +1,127 @@
+version: '3.8'
+
+services:
+  # Redis for queue and cache
+  redis:
+    image: redis:7-alpine
+    container_name: openhqm-redis-proxy
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - openhqm-network
+
+  # OpenHQM API Server (in proxy mode)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openhqm-api-proxy
+    command: python -m openhqm.api.listener
+    ports:
+      - "8000:8000"
+    environment:
+      # Server config
+      OPENHQM_SERVER__HOST: "0.0.0.0"
+      OPENHQM_SERVER__PORT: "8000"
+      
+      # Queue config
+      OPENHQM_QUEUE__TYPE: "redis"
+      OPENHQM_QUEUE__REDIS_URL: "redis://redis:6379"
+      
+      # Cache config
+      OPENHQM_CACHE__TYPE: "redis"
+      OPENHQM_CACHE__REDIS_URL: "redis://redis:6379"
+      
+      # Proxy mode configuration
+      OPENHQM_PROXY__ENABLED: "true"
+      OPENHQM_PROXY__DEFAULT_ENDPOINT: "jsonplaceholder"
+      
+      # Define endpoints as JSON
+      # This example uses JSONPlaceholder public API for testing
+      OPENHQM_PROXY__ENDPOINTS: >
+        {
+          "jsonplaceholder": {
+            "url": "https://jsonplaceholder.typicode.com/posts",
+            "method": "POST",
+            "timeout": 30
+          },
+          "httpbin": {
+            "url": "https://httpbin.org/post",
+            "method": "POST",
+            "timeout": 30
+          }
+        }
+      
+      # Forward these headers
+      OPENHQM_PROXY__FORWARD_HEADERS: '["Content-Type", "Accept", "User-Agent", "Authorization"]'
+      
+      # Monitoring
+      OPENHQM_MONITORING__LOG_LEVEL: "INFO"
+      OPENHQM_MONITORING__METRICS_ENABLED: "true"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - openhqm-network
+
+  # Workers (in proxy mode)
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m openhqm.worker.worker worker-${WORKER_ID:-1}
+    environment:
+      # Queue config
+      OPENHQM_QUEUE__TYPE: "redis"
+      OPENHQM_QUEUE__REDIS_URL: "redis://redis:6379"
+      
+      # Cache config
+      OPENHQM_CACHE__TYPE: "redis"
+      OPENHQM_CACHE__REDIS_URL: "redis://redis:6379"
+      
+      # Worker config
+      OPENHQM_WORKER__BATCH_SIZE: "10"
+      OPENHQM_WORKER__TIMEOUT_SECONDS: "300"
+      OPENHQM_WORKER__MAX_RETRIES: "3"
+      
+      # Proxy mode configuration (same as API)
+      OPENHQM_PROXY__ENABLED: "true"
+      OPENHQM_PROXY__DEFAULT_ENDPOINT: "jsonplaceholder"
+      OPENHQM_PROXY__ENDPOINTS: >
+        {
+          "jsonplaceholder": {
+            "url": "https://jsonplaceholder.typicode.com/posts",
+            "method": "POST",
+            "timeout": 30
+          },
+          "httpbin": {
+            "url": "https://httpbin.org/post",
+            "method": "POST",
+            "timeout": 30
+          }
+        }
+      OPENHQM_PROXY__FORWARD_HEADERS: '["Content-Type", "Accept", "User-Agent", "Authorization"]'
+      
+      # Monitoring
+      OPENHQM_MONITORING__LOG_LEVEL: "INFO"
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: 3  # Run 3 worker instances
+    networks:
+      - openhqm-network
+
+networks:
+  openhqm-network:
+    driver: bridge

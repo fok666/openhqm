@@ -1,0 +1,248 @@
+"""Unit tests for proxy processor."""
+
+import pytest
+from unittest.mock import AsyncMock, patch, MagicMock
+import aiohttp
+
+from openhqm.worker.processor import MessageProcessor
+from openhqm.config.settings import settings, EndpointConfig, ProxySettings
+from openhqm.exceptions import ProcessingError, ConfigurationError
+
+
+@pytest.fixture
+def mock_endpoint_config():
+    """Create a mock endpoint configuration."""
+    return EndpointConfig(
+        url="https://api.example.com/process",
+        method="POST",
+        timeout=300,
+        auth_type="bearer",
+        auth_token="test-token-123",
+        headers={"X-Service": "openhqm"},
+    )
+
+
+@pytest.fixture
+def mock_proxy_settings(mock_endpoint_config):
+    """Create mock proxy settings."""
+    with patch.object(settings, "proxy") as mock_proxy:
+        mock_proxy.enabled = True
+        mock_proxy.default_endpoint = "test-api"
+        mock_proxy.endpoints = {"test-api": mock_endpoint_config}
+        mock_proxy.forward_headers = ["Content-Type", "Authorization"]
+        mock_proxy.strip_headers = ["Host", "Connection"]
+        mock_proxy.max_response_size = 10 * 1024 * 1024
+        yield mock_proxy
+
+
+@pytest.mark.asyncio
+async def test_processor_proxy_request_success(mock_proxy_settings):
+    """Test successful proxy request."""
+    processor = MessageProcessor()
+    
+    # Mock HTTP response
+    mock_response = AsyncMock()
+    mock_response.status = 200
+    mock_response.headers = {"Content-Type": "application/json", "X-Response-ID": "123"}
+    mock_response.json = AsyncMock(return_value={"result": "success", "data": "processed"})
+    
+    mock_session = AsyncMock()
+    mock_session.request = AsyncMock(return_value=mock_response)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_session.__aexit__ = AsyncMock()
+    
+    with patch.object(processor, "_get_session", return_value=AsyncMock()) as mock_get_session:
+        mock_get_session.return_value.request = AsyncMock()
+        mock_get_session.return_value.request.return_value.__aenter__ = AsyncMock(
+            return_value=mock_response
+        )
+        mock_get_session.return_value.request.return_value.__aexit__ = AsyncMock()
+        
+        result, status_code, headers = await processor.process(
+            payload={"operation": "test", "data": "hello"},
+            metadata={"endpoint": "test-api"},
+            headers={"Content-Type": "application/json"},
+        )
+    
+    assert status_code == 200
+    assert result == {"result": "success", "data": "processed"}
+    assert "Content-Type" in headers
+    
+    await processor.close()
+
+
+@pytest.mark.asyncio
+async def test_processor_prepare_bearer_auth():
+    """Test Bearer token authentication preparation."""
+    processor = MessageProcessor()
+    
+    config = EndpointConfig(
+        url="https://api.example.com",
+        auth_type="bearer",
+        auth_token="my-bearer-token",
+    )
+    
+    headers = processor._prepare_auth_headers(config)
+    
+    assert headers["Authorization"] == "Bearer my-bearer-token"
+
+
+@pytest.mark.asyncio
+async def test_processor_prepare_api_key_auth():
+    """Test API key authentication preparation."""
+    processor = MessageProcessor()
+    
+    config = EndpointConfig(
+        url="https://api.example.com",
+        auth_type="api_key",
+        auth_token="my-api-key",
+        auth_header_name="X-API-Key",
+    )
+    
+    headers = processor._prepare_auth_headers(config)
+    
+    assert headers["X-API-Key"] == "my-api-key"
+
+
+@pytest.mark.asyncio
+async def test_processor_prepare_basic_auth():
+    """Test Basic authentication preparation."""
+    processor = MessageProcessor()
+    
+    config = EndpointConfig(
+        url="https://api.example.com",
+        auth_type="basic",
+        auth_username="user",
+        auth_password="pass",
+    )
+    
+    headers = processor._prepare_auth_headers(config)
+    
+    assert "Authorization" in headers
+    assert headers["Authorization"].startswith("Basic ")
+
+
+@pytest.mark.asyncio
+async def test_processor_prepare_custom_auth():
+    """Test custom authentication preparation."""
+    processor = MessageProcessor()
+    
+    config = EndpointConfig(
+        url="https://api.example.com",
+        auth_type="custom",
+        auth_header_name="X-Custom-Token",
+        auth_token="custom-token-value",
+    )
+    
+    headers = processor._prepare_auth_headers(config)
+    
+    assert headers["X-Custom-Token"] == "custom-token-value"
+
+
+@pytest.mark.asyncio
+async def test_processor_merge_headers(mock_proxy_settings):
+    """Test header merging with forwarding rules."""
+    processor = MessageProcessor()
+    
+    config = EndpointConfig(
+        url="https://api.example.com",
+        headers={"X-Static": "static-value"},
+        auth_type="bearer",
+        auth_token="token123",
+    )
+    
+    request_headers = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer client-token",
+        "Host": "original-host.com",
+        "X-Custom": "custom-value",
+    }
+    
+    merged = processor._merge_headers(config, request_headers)
+    
+    # Static header should be present
+    assert merged["X-Static"] == "static-value"
+    
+    # Auth header from config should override
+    assert merged["Authorization"] == "Bearer token123"
+    
+    # Forwarded header should be present
+    assert merged["Content-Type"] == "application/json"
+    
+    # Stripped header should not be present
+    assert "Host" not in merged
+
+
+@pytest.mark.asyncio
+async def test_processor_endpoint_not_found():
+    """Test error when endpoint is not found."""
+    processor = MessageProcessor()
+    
+    with patch.object(settings, "proxy") as mock_proxy:
+        mock_proxy.enabled = True
+        mock_proxy.endpoints = {}
+        mock_proxy.default_endpoint = None
+        
+        with pytest.raises(ConfigurationError, match="No endpoint specified"):
+            await processor.process(
+                payload={"data": "test"},
+                metadata={"endpoint": "non-existent"},
+            )
+
+
+@pytest.mark.asyncio
+async def test_processor_proxy_disabled():
+    """Test error when proxy mode is disabled."""
+    processor = MessageProcessor()
+    
+    with patch.object(settings, "proxy") as mock_proxy:
+        mock_proxy.enabled = False
+        
+        with pytest.raises(ConfigurationError, match="Proxy mode is not enabled"):
+            await processor.process(payload={"data": "test"})
+
+
+@pytest.mark.asyncio
+async def test_processor_http_error(mock_proxy_settings):
+    """Test handling of HTTP client errors."""
+    processor = MessageProcessor()
+    
+    mock_session = AsyncMock()
+    mock_session.request.side_effect = aiohttp.ClientError("Connection failed")
+    
+    with patch.object(processor, "_get_session", return_value=mock_session):
+        with pytest.raises(ProcessingError, match="Failed to proxy request"):
+            await processor.process(
+                payload={"data": "test"},
+                metadata={"endpoint": "test-api"},
+            )
+    
+    await processor.close()
+
+
+@pytest.mark.asyncio
+async def test_processor_method_override(mock_proxy_settings):
+    """Test HTTP method override from metadata."""
+    processor = MessageProcessor()
+    
+    mock_response = AsyncMock()
+    mock_response.status = 200
+    mock_response.headers = {"Content-Type": "application/json"}
+    mock_response.json = AsyncMock(return_value={"status": "ok"})
+    
+    mock_session = AsyncMock()
+    
+    with patch.object(processor, "_get_session", return_value=mock_session):
+        mock_session.request.return_value.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_session.request.return_value.__aexit__ = AsyncMock()
+        
+        await processor.process(
+            payload={"data": "test"},
+            metadata={"endpoint": "test-api", "method": "PUT"},
+        )
+        
+        # Verify PUT method was used
+        call_args = mock_session.request.call_args
+        assert call_args[1]["method"] == "PUT"
+    
+    await processor.close()
