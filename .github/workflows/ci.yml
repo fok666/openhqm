@@ -203,6 +203,7 @@ jobs:
 
   integration-test:
     name: Integration Tests
+    # use ubuntu-latest for x64 builds and ubuntu-24.04-arm for arm64 builds
     runs-on: ubuntu-latest
     needs: [build]
     permissions:
@@ -233,6 +234,8 @@ jobs:
         continue-on-error: true
 
       - name: Run integration tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
         run: |
           pytest tests/ -v -m integration
 
