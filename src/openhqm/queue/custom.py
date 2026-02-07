@@ -86,7 +86,9 @@ class CustomQueueHandler:
         except ImportError as e:
             raise QueueError(f"Failed to import custom queue module '{module_path}': {e}") from e
         except AttributeError as e:
-            raise QueueError(f"Failed to find class '{class_name}' in module '{module_path}': {e}") from e
+            raise QueueError(
+                f"Failed to find class '{class_name}' in module '{module_path}': {e}"
+            ) from e
         except Exception as e:
             raise QueueError(f"Failed to load custom queue handler: {e}") from e
 
