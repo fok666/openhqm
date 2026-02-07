@@ -5,7 +5,7 @@
 ARG QUEUE_BACKEND=all
 
 # Stage 1: Build stage
-FROM python:3.11-slim AS builder
+FROM python:3.14-slim AS builder
 
 ARG QUEUE_BACKEND
 
@@ -45,7 +45,7 @@ RUN if [ "$QUEUE_BACKEND" = "all" ]; then \
     fi
 
 # Stage 2: Runtime stage
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 ARG QUEUE_BACKEND
 LABEL org.opencontainers.image.title="OpenHQM" \
