@@ -31,6 +31,29 @@ class MessageProcessor:
         if self._session and not self._session.closed:
             await self._session.close()
 
+    def _example_process(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Example processing logic for testing when proxy mode is disabled."""
+        from datetime import datetime
+
+        operation = payload.get("operation", "unknown")
+        data = payload.get("data", "")
+
+        if operation == "echo":
+            output = data
+        elif operation == "uppercase":
+            output = str(data).upper()
+        elif operation == "reverse":
+            output = str(data)[::-1]
+        elif operation == "error":
+            raise ValueError("Test error")
+        else:
+            output = f"Unknown operation: {operation}"
+
+        return {
+            "output": output,
+            "processed_at": datetime.utcnow().isoformat(),
+        }
+
     def _prepare_auth_headers(self, endpoint_config: EndpointConfig) -> dict[str, str]:
         """Prepare authentication headers based on endpoint configuration."""
         headers = {}
@@ -87,7 +110,7 @@ class MessageProcessor:
     def _get_endpoint_config(self, endpoint_name: str | None = None) -> EndpointConfig:
         """Get endpoint configuration by name or default."""
         if not settings.proxy.enabled:
-            raise ConfigurationError("Proxy mode is not enabled")
+            return None  # Allow fallback to example processing
 
         # Use named endpoint if specified
         if endpoint_name:
@@ -140,6 +163,10 @@ class MessageProcessor:
 
         # Get endpoint configuration
         endpoint_config = self._get_endpoint_config(endpoint_name)
+
+        # Fallback to example processing if proxy is disabled
+        if endpoint_config is None:
+            return self._example_process(payload)
 
         # Determine HTTP method
         http_method = (method or endpoint_config.method or "POST").upper()

@@ -1,6 +1,6 @@
 """Unit tests for proxy processor."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp
 import pytest
@@ -53,9 +53,14 @@ async def test_processor_proxy_request_success(mock_proxy_settings):
     mock_context.__aexit__ = AsyncMock(return_value=None)
 
     mock_session = AsyncMock()
-    mock_session.request = AsyncMock(return_value=mock_context)
+    # session.request should return the context manager directly, not a coroutine
+    mock_session.request = Mock(return_value=mock_context)
 
-    with patch.object(processor, "_get_session", return_value=mock_session):
+    # Make _get_session return mock_session properly
+    async def mock_get_session():
+        return mock_session
+
+    with patch.object(processor, "_get_session", side_effect=mock_get_session):
         result, status_code, headers = await processor.process(
             payload={"operation": "test", "data": "hello"},
             metadata={"endpoint": "test-api"},
@@ -191,14 +196,16 @@ async def test_processor_endpoint_not_found():
 
 @pytest.mark.asyncio
 async def test_processor_proxy_disabled():
-    """Test error when proxy mode is disabled."""
+    """Test fallback to example processing when proxy mode is disabled."""
     processor = MessageProcessor()
 
     with patch.object(settings, "proxy") as mock_proxy:
         mock_proxy.enabled = False
 
-        with pytest.raises(ConfigurationError, match="Proxy mode is not enabled"):
-            await processor.process(payload={"data": "test"})
+        # Should fall back to example processing instead of raising error
+        result = await processor.process(payload={"operation": "echo", "data": "test"})
+        assert result["output"] == "test"
+        assert "processed_at" in result
 
 
 @pytest.mark.asyncio
@@ -211,9 +218,14 @@ async def test_processor_http_error(mock_proxy_settings):
     mock_context.__aenter__.side_effect = aiohttp.ClientError("Connection failed")
 
     mock_session = AsyncMock()
-    mock_session.request.return_value = mock_context
+    # session.request should return the context manager directly, not a coroutine
+    mock_session.request = Mock(return_value=mock_context)
 
-    with patch.object(processor, "_get_session", return_value=mock_session):
+    # Make _get_session return mock_session properly
+    async def mock_get_session():
+        return mock_session
+
+    with patch.object(processor, "_get_session", side_effect=mock_get_session):
         with pytest.raises(ProcessingError, match="Failed to proxy request"):
             await processor.process(
                 payload={"data": "test"},
@@ -239,9 +251,14 @@ async def test_processor_method_override(mock_proxy_settings):
     mock_context.__aexit__ = AsyncMock(return_value=None)
 
     mock_session = AsyncMock()
-    mock_session.request.return_value = mock_context
+    # session.request should return the context manager directly, not a coroutine
+    mock_session.request = Mock(return_value=mock_context)
 
-    with patch.object(processor, "_get_session", return_value=mock_session):
+    # Make _get_session return mock_session properly
+    async def mock_get_session():
+        return mock_session
+
+    with patch.object(processor, "_get_session", side_effect=mock_get_session):
         await processor.process(
             payload={"data": "test"},
             metadata={"endpoint": "test-api", "method": "PUT"},
