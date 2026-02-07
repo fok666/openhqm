@@ -2,7 +2,7 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![CI](https://github.com/yourusername/openhqm/workflows/CI/badge.svg)](https://github.com/yourusername/openhqm/actions)
+[![CI](https://github.com/fok666/openhqm/workflows/CI/badge.svg)](https://github.com/fok666/openhqm/actions)
 [![Multi-Arch](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-blue)](docs/MULTI_ARCH_BUILD.md)
 
 **OpenHQM** is an asynchronous HTTP request processing system that decouples request handling from response delivery using message queues. Deploy it as a **Kubernetes sidecar** to add async queue capabilities to legacy HTTP workloads **without changing code**, or use it as a standalone microservice for async processing.
