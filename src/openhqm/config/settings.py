@@ -18,9 +18,9 @@ class ServerSettings(BaseSettings):
 class QueueSettings(BaseSettings):
     """Message queue configuration."""
 
-    type: Literal["redis", "kafka", "sqs", "azure_eventhubs", "gcp_pubsub", "mqtt", "custom"] = (
-        Field(default="redis", description="Queue backend type")
-    )
+    type: Literal[
+        "redis", "kafka", "sqs", "azure_eventhubs", "gcp_pubsub", "mqtt", "custom"
+    ] = Field(default="redis", description="Queue backend type")
 
     # Redis Streams configuration
     redis_url: str = Field(default="redis://localhost:6379", description="Redis connection URL")
