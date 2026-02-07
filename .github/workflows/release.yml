@@ -131,6 +131,9 @@ jobs:
           - name: minimal
             tag_suffix: "-minimal"
     steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
@@ -148,36 +151,32 @@ jobs:
 
       - name: Create and push multi-arch manifest (full version)
         run: |
-          docker manifest create --amend \
+          docker buildx imagetools create -t \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }} \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-amd64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-arm64
-          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}
 
       - name: Create and push multi-arch manifest (major.minor)
         run: |
-          docker manifest create --amend \
+          docker buildx imagetools create -t \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.minor }}${{ matrix.queue_backend.tag_suffix }} \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-amd64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-arm64
-          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.minor }}${{ matrix.queue_backend.tag_suffix }}
 
       - name: Create and push multi-arch manifest (major)
         run: |
-          docker manifest create --amend \
+          docker buildx imagetools create -t \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}${{ matrix.queue_backend.tag_suffix }} \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-amd64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-arm64
-          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}${{ matrix.queue_backend.tag_suffix }}
 
       - name: Create and push latest manifest
         if: ${{ !contains(github.ref, '-') }}
         run: |
-          docker manifest create --amend \
+          docker buildx imagetools create -t \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest${{ matrix.queue_backend.tag_suffix }} \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-amd64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-arm64
-          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest${{ matrix.queue_backend.tag_suffix }}
 
   create-release:
     name: Create GitHub Release
