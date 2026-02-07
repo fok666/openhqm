@@ -148,7 +148,7 @@ jobs:
 
       - name: Create and push multi-arch manifest (full version)
         run: |
-          docker manifest create \
+          docker manifest create --amend \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }} \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-amd64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-arm64
@@ -156,7 +156,7 @@ jobs:
 
       - name: Create and push multi-arch manifest (major.minor)
         run: |
-          docker manifest create \
+          docker manifest create --amend \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.minor }}${{ matrix.queue_backend.tag_suffix }} \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-amd64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-arm64
@@ -164,7 +164,7 @@ jobs:
 
       - name: Create and push multi-arch manifest (major)
         run: |
-          docker manifest create \
+          docker manifest create --amend \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}${{ matrix.queue_backend.tag_suffix }} \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-amd64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-arm64
@@ -173,7 +173,7 @@ jobs:
       - name: Create and push latest manifest
         if: ${{ !contains(github.ref, '-') }}
         run: |
-          docker manifest create \
+          docker manifest create --amend \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest${{ matrix.queue_backend.tag_suffix }} \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-amd64 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ matrix.queue_backend.tag_suffix }}-arm64
