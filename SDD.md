@@ -1,8 +1,8 @@
 # Software Design Document (SDD)
 ## OpenHQM - HTTP Queue Message Handler
 
-**Version:** 1.0  
-**Date:** February 7, 2026  
+**Version:** 1.0
+**Date:** February 7, 2026
 **Status:** Initial Design
 
 ---

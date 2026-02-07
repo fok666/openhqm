@@ -24,12 +24,10 @@ Complete documentation for OpenHQM - HTTP Queue Message Handler.
 - **[Docker Images](DOCKER_IMAGES.md)** - Image variants and usage
 - **[Multi-Arch Build Guide](MULTI_ARCH_BUILD.md)** - Build for AMD64 & ARM64
 - **[Build Test Results](BUILD_TEST_RESULTS.md)** - Multi-arch test validation
-- **[Multi-Arch Summary](MULTI_ARCH_SUMMARY.md)** - Implementation overview
 
 ## 🔌 Queue Backends
 
 - **[Queue Backends Guide](QUEUE_BACKENDS.md)** - Complete guide for all 7 backends
-- **[Queue Infrastructure Summary](QUEUE_INFRASTRUCTURE_SUMMARY.md)** - Quick reference
 
 **Supported Backends:**
 - Redis Streams (low latency)
@@ -43,12 +41,7 @@ Complete documentation for OpenHQM - HTTP Queue Message Handler.
 ## 🔄 Proxy Mode
 
 - **[Proxy Mode Guide](PROXY_MODE.md)** - Complete reverse proxy documentation
-- **[Proxy Summary](PROXY_SUMMARY.md)** - Quick overview
 - **[Testing Proxy Mode](TESTING_PROXY.md)** - Test scenarios
-
-## 🎨 Feature Summaries
-
-- **[Feature Summary](FEATURE_SUMMARY.md)** - All features at a glance
 
 ## 📖 Navigation by Topic
 
@@ -67,10 +60,10 @@ Complete documentation for OpenHQM - HTTP Queue Message Handler.
 → [Docker Images](DOCKER_IMAGES.md) → [Multi-Arch Build](MULTI_ARCH_BUILD.md) → [Quick Reference](QUICK_REFERENCE.md)
 
 **Configure Queue Backend**
-→ [Queue Backends Guide](QUEUE_BACKENDS.md) → [Queue Infrastructure Summary](QUEUE_INFRASTRUCTURE_SUMMARY.md)
+→ [Queue Backends Guide](QUEUE_BACKENDS.md)
 
 **Use as Reverse Proxy**
-→ [Proxy Mode Guide](PROXY_MODE.md) → [Proxy Summary](PROXY_SUMMARY.md) → [Testing Proxy](TESTING_PROXY.md)
+→ [Proxy Mode Guide](PROXY_MODE.md) → [Testing Proxy](TESTING_PROXY.md)
 
 **Modernize Legacy Apps**
 → [Sidecar Revolution](SIDECAR_REVOLUTION.md) → [Kubernetes Sidecar](KUBERNETES_SIDECAR.md) → [Composable Patterns](COMPOSABLE_PATTERNS.md)
