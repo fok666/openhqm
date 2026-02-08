@@ -32,14 +32,21 @@ data:
     enable_fallback: true
 
 ---
-# Deployment with ConfigMap mounted
+# StatefulSet with ConfigMap mounted (required for pod-index label)
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: openhqm-workers
 spec:
+  serviceName: openhqm-workers
   replicas: 5
+  selector:
+    matchLabels:
+      app: openhqm-worker
   template:
+    metadata:
+      labels:
+        app: openhqm-worker
     spec:
       containers:
       - name: worker

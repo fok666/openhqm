@@ -8,6 +8,7 @@ import structlog
 
 from openhqm.exceptions import ConfigurationError, ProcessingError
 from openhqm.routing.models import Route, RouteConfig, RoutingResult, TransformType
+from openhqm.utils.helpers import get_nested_value
 
 logger = structlog.get_logger(__name__)
 
@@ -47,25 +48,6 @@ class RoutingEngine:
             jq_available=self._jq_available,
         )
 
-    def _get_nested_value(self, data: dict, path: str) -> Any:
-        """Get value from nested dict using dot notation.
-        
-        Args:
-            data: Dictionary to search
-            path: Dot-separated path (e.g., "metadata.type")
-            
-        Returns:
-            Value at path or None if not found
-        """
-        keys = path.split(".")
-        value = data
-        for key in keys:
-            if isinstance(value, dict):
-                value = value.get(key)
-            else:
-                return None
-        return value
-
     def _match_route(self, route: Route, message: dict[str, Any]) -> bool:
         """Check if message matches route criteria.
         
@@ -85,7 +67,7 @@ class RoutingEngine:
             return True
         
         # Get field value
-        field_value = self._get_nested_value(message, route.match_field)
+        field_value = get_nested_value(message, route.match_field)
         if field_value is None:
             return False
         
@@ -184,14 +166,15 @@ class RoutingEngine:
             
             for match in matches:
                 field_path = match.strip()
-                value = self._get_nested_value(data, field_path)
+                value = get_nested_value(data, field_path)
                 
                 # Convert value to JSON-safe string
                 if value is not None:
                     if isinstance(value, (dict, list)):
                         value_str = json.dumps(value)
                     else:
-                        value_str = json.dumps(value)
+                        # For strings, don't add extra quotes (template already has them)
+                        value_str = str(value)
                 else:
                     value_str = "null"
                 
@@ -256,7 +239,7 @@ class RoutingEngine:
         
         for header_name, field_path in route.header_mappings.items():
             # Simple field path extraction
-            value = self._get_nested_value(message, field_path)
+            value = get_nested_value(message, field_path)
             if value is not None:
                 headers[header_name] = str(value)
         
@@ -280,7 +263,7 @@ class RoutingEngine:
             return params
         
         for param_name, field_path in route.query_params.items():
-            value = self._get_nested_value(message, field_path)
+            value = get_nested_value(message, field_path)
             if value is not None:
                 params[param_name] = str(value)
         

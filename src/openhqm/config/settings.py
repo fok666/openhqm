@@ -153,7 +153,10 @@ class MonitoringSettings(BaseSettings):
 
     metrics_enabled: bool = Field(default=True, description="Enable Prometheus metrics")
     log_level: str = Field(default="INFO", description="Logging level")
-    loRoutingSettings(BaseSettings):
+    log_format: Literal["json", "text"] = Field(default="json", description="Log format")
+
+
+class RoutingSettings(BaseSettings):
     """Routing configuration."""
 
     enabled: bool = Field(default=False, description="Enable routing engine")
@@ -183,10 +186,7 @@ class Settings(BaseSettings):
     cache: CacheSettings = Field(default_factory=CacheSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     routing: RoutingSettings = Field(default_factory=RoutingSettings)
-    partitioning: PartitionConfig = Field(default_factory=PartitionConfig
-    proxy: ProxySettings = Field(default_factory=ProxySettings)
-    cache: CacheSettings = Field(default_factory=CacheSettings)
-    monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
+    partitioning: PartitionConfig = Field(default_factory=PartitionConfig)
 
 
 # Global settings instance

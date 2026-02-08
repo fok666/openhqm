@@ -230,27 +230,56 @@ metadata:
 spec:
   replicas: 5
   serviceName: openhqm-workers
+  selector:
+    matchLabels:
+      app: openhqm-worker
   template:
+    metadata:
+      labels:
+        app: openhqm-worker
     spec:
-      containers:
-      - name: worker
-        image: openhqm:latest
-        command: ["python", "-m", "openhqm.worker.worker"]
-        args:
-        - "$(POD_NAME)"
-        - "$(POD_INDEX)"
-        - "5"
+      initContainers:
+      - name: extract-pod-index
+        image: busybox:latest
+        command:
+        - sh
+        - -c
+        - |
+          # Extract pod index from StatefulSet pod name (e.g., openhqm-workers-2 -> 2)
+          POD_INDEX=$(echo $POD_NAME | rev | cut -d'-' -f1 | rev)
+          echo $POD_INDEX > /shared/pod-index
         env:
         - name: POD_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        - name: POD_INDEX
-          value: "0"  # Set via init script or controller
+        volumeMounts:
+        - name: shared
+          mountPath: /shared
+      containers:
+      - name: worker
+        image: openhqm:latest
+        command:
+        - sh
+        - -c
+        - |
+          POD_INDEX=$(cat /shared/pod-index)
+          exec python -m openhqm.worker.worker "$(POD_NAME)" "$POD_INDEX" "5"
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: OPENHQM_PARTITIONING__ENABLED
           value: "true"
         - name: OPENHQM_PARTITIONING__PARTITION_COUNT
           value: "10"
+        volumeMounts:
+        - name: shared
+          mountPath: /shared
+      volumes:
+      - name: shared
+        emptyDir: {}
 ```
 
 ### Partition Assignment

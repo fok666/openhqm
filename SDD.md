@@ -162,10 +162,9 @@ flowchart TD
   - Support multiple partitioning strategies (hash, sticky, round-robin)
   - Rebalance on worker scale changes
 - **Use Case**: Enable horizontal scaling for legacy apps lacking session management
+  - Dead letter queue for failed messages
 
-#### 3.2.6etter queue for failed messages
-
-#### 3.2.4 Response Handler
+#### 3.2.6 Response Handler
 - **Technology**: Integrated with HTTP Listener
 - **Responsibilities**:
   - Consume responses from response queue
@@ -947,7 +946,7 @@ proxy:
 
 ## 13. Appendix
 
-### 12.1 Glossary
+### 13.1 Glossary
 - **Correlation ID**: Unique identifier linking request to response
 - **Dead Letter Queue**: Queue for messages that failed processing
 - **Idempotency**: Ability to process same request multiple times safely

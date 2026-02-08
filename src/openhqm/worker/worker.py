@@ -340,8 +340,7 @@ async def main():
     worker_index = int(sys.argv[2]) if len(sys.argv) > 2 else 0
     worker_count = int(sys.argv[3]) if len(sys.argv) > 3 else settings.worker.count
     
-    await run_worker(worker_id, worker_index, worker_count len(sys.argv) > 1 else "worker-1"
-    await run_worker(worker_id)
+    await run_worker(worker_id, worker_index, worker_count)
 
 
 if __name__ == "__main__":

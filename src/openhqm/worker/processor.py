@@ -27,13 +27,9 @@ class MessageProcessor:
         self._routing_engine: RoutingEngine | None = None
         self._partition_manager: PartitionManager | None = None
         
-        # Initialize routing  and cleanup resources."""
-        if self._session and not self._session.closed:
-            await self._session.close()
-        
-        # Cleanup expired sessions if partitioning is enabled
-        if self._partition_manager:
-            self._partition_manager.cleanup_expired_sessions()
+        # Initialize routing engine if enabled
+        if settings.routing.enabled:
+            self._init_routing_engine()
         
         # Initialize partition manager if enabled
         if settings.partitioning.enabled and worker_id:
@@ -63,9 +59,13 @@ class MessageProcessor:
         return self._session
 
     async def close(self):
-        """Close HTTP session."""
+        """Close HTTP session and cleanup resources."""
         if self._session and not self._session.closed:
             await self._session.close()
+        
+        # Cleanup expired sessions if partitioning is enabled
+        if self._partition_manager:
+            self._partition_manager.cleanup_expired_sessions()
 
     def _example_process(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Example processing logic for testing when proxy mode is disabled."""

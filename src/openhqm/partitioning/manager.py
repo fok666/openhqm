@@ -7,6 +7,7 @@ from typing import Any
 import structlog
 
 from openhqm.partitioning.models import PartitionConfig, PartitionStrategy, SessionInfo
+from openhqm.utils.helpers import get_nested_value
 
 logger = structlog.get_logger(__name__)
 
@@ -38,17 +39,6 @@ class PartitionManager:
             partition_count=config.partition_count,
         )
 
-    def _get_nested_value(self, data: dict, path: str) -> Any:
-        """Get value from nested dict using dot notation."""
-        keys = path.split(".")
-        value = data
-        for key in keys:
-            if isinstance(value, dict):
-                value = value.get(key)
-            else:
-                return None
-        return value
-
     def _hash_key(self, key: str) -> int:
         """Generate consistent hash for a key.
         
@@ -58,7 +48,7 @@ class PartitionManager:
         Returns:
             Hash value as integer
         """
-        return int(hashlib.md5(key.encode()).hexdigest(), 16)
+        return int(hashlib.sha256(key.encode()).hexdigest(), 16)
 
     def _assign_partition(self, key: str) -> int:
         """Assign partition based on key and strategy.
@@ -119,7 +109,7 @@ class PartitionManager:
         Returns:
             Partition key or None if not found
         """
-        return self._get_nested_value(message, self.config.partition_key_field)
+        return get_nested_value(message, self.config.partition_key_field)
 
     def get_session_id(self, message: dict[str, Any]) -> str | None:
         """Extract session ID from message.
@@ -130,7 +120,7 @@ class PartitionManager:
         Returns:
             Session ID or None if not found
         """
-        return self._get_nested_value(message, self.config.session_key_field)
+        return get_nested_value(message, self.config.session_key_field)
 
     def get_partition_for_message(self, message: dict[str, Any]) -> int | None:
         """Determine partition for a message.
