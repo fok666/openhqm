@@ -287,7 +287,8 @@ class Worker:
 
         logger.info("Worker shutdown complete", worker_id=self.worker_id)
 
-, worker_index: int = 0, worker_count: int = 1):
+
+async def run_worker(worker_id: str, worker_index: int = 0, worker_count: int = 1):
     """
     Run a worker instance.
 
