@@ -1,0 +1,82 @@
+# Kubernetes ConfigMap for routing configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openhqm-routing-config
+  namespace: default
+data:
+  routing.yaml: |
+    version: "1.0"
+    routes:
+      - name: user-api
+        description: "Route user requests"
+        match_field: "metadata.type"
+        match_value: "user"
+        endpoint: "user-service"
+        transform_type: "jq"
+        transform: |
+          {
+            "user_id": .payload.id,
+            "action": .payload.action,
+            "data": .payload.data
+          }
+      
+      - name: order-api
+        description: "Route order requests"
+        match_field: "metadata.type"
+        match_value: "order"
+        endpoint: "order-service"
+        transform_type: "passthrough"
+    
+    default_endpoint: "default-backend"
+    enable_fallback: true
+
+---
+# StatefulSet with ConfigMap mounted (required for pod-index label)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: openhqm-workers
+spec:
+  serviceName: openhqm-workers
+  replicas: 5
+  selector:
+    matchLabels:
+      app: openhqm-worker
+  template:
+    metadata:
+      labels:
+        app: openhqm-worker
+    spec:
+      containers:
+      - name: worker
+        image: openhqm:latest
+        command: ["python", "-m", "openhqm.worker.worker"]
+        args: ["$(POD_NAME)", "$(POD_INDEX)", "5"]
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_INDEX
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['statefulset.kubernetes.io/pod-index']
+        - name: OPENHQM_ROUTING__ENABLED
+          value: "true"
+        - name: OPENHQM_ROUTING__CONFIG_PATH
+          value: "/etc/openhqm/routing.yaml"
+        - name: OPENHQM_PARTITIONING__ENABLED
+          value: "true"
+        - name: OPENHQM_PARTITIONING__PARTITION_COUNT
+          value: "10"
+        - name: OPENHQM_PARTITIONING__PARTITION_KEY_FIELD
+          value: "metadata.session_id"
+        volumeMounts:
+        - name: routing-config
+          mountPath: /etc/openhqm
+          readOnly: true
+      volumes:
+      - name: routing-config
+        configMap:
+          name: openhqm-routing-config

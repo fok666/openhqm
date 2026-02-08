@@ -398,19 +398,23 @@ When creating new files:
 - Use type hints everywhere
 - Document why, not what (code should be self-explanatory)
 - Skip comprehensive summaries and summary documents creation steps
+- Implement small incremental changes and verify your steps along the way
+- Always test locally before pushing changes
+- Push to new branches for review, don't commit directly to main
+- Use pull requests for code review and discussion
 
 ## Quick Reference
 
 ### Running the Application
 ```bash
 # Start API server
-python -m openhqm.api.listener
+python3 -m openhqm.api.listener
 
 # Start workers
-python -m openhqm.worker.worker
+python3 -m openhqm.worker.worker
 
 # Run tests
-pytest tests/ -v
+pytest3 tests/ -v
 
 # Format code
 ruff format .

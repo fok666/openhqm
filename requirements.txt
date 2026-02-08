@@ -25,3 +25,8 @@ prometheus-client==0.19.0
 
 # Utilities
 python-dotenv==1.0.0
+
+# Routing and transformation
+# pyjq>=2.6.0  # Optional: JQ transforms (requires Python < 3.13, complex build dependencies)
+jsonpath-ng>=1.6.0
+pyyaml>=6.0.1

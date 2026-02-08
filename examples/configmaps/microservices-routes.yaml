@@ -1,0 +1,96 @@
+# OpenHQM Microservices Routes ConfigMap
+# Multi-service routing configuration for microservices architecture
+# Can be imported directly into OpenHQM Router Manager for editing
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openhqm-microservices-routes
+  namespace: microservices
+  labels:
+    app: openhqm
+    component: router
+    environment: staging
+    architecture: microservices
+  annotations:
+    description: "Microservices routing configuration"
+    openhqm.io/version: "1.0"
+data:
+  routing.yaml: |
+    version: "1.0"
+    routes:
+      # User Service Routes
+      - name: user-service-create
+        description: "Create new user"
+        match_field: "metadata.service"
+        match_value: "users"
+        priority: 10
+        endpoint: "user-service"
+        method: "POST"
+        transform_type: "jq"
+        transform: |
+          {
+            "action": "create",
+            "data": .payload
+          }
+      
+      # Order Service Routes
+      - name: order-service-create
+        description: "Create new order"
+        match_field: "metadata.service"
+        match_value: "orders"
+        priority: 10
+        endpoint: "order-service"
+        method: "POST"
+        transform_type: "jq"
+        transform: |
+          {
+            "action": "create",
+            "order": .payload
+          }
+      
+      # Product Service Routes
+      - name: product-service-query
+        description: "Query products"
+        match_field: "metadata.service"
+        match_value: "products"
+        priority: 10
+        endpoint: "product-service"
+        method: "POST"
+        transform_type: "passthrough"
+      
+      # Inventory Service Routes
+      - name: inventory-service-update
+        description: "Update inventory"
+        match_field: "metadata.service"
+        match_value: "inventory"
+        priority: 10
+        endpoint: "inventory-service"
+        method: "POST"
+        transform_type: "jq"
+        transform: |
+          {
+            "productId": .payload.productId,
+            "quantity": .payload.quantity,
+            "operation": .payload.operation
+          }
+      
+      # Shipping Service Routes
+      - name: shipping-service-calculate
+        description: "Calculate shipping"
+        match_field: "metadata.service"
+        match_value: "shipping"
+        priority: 10
+        endpoint: "shipping-service"
+        method: "POST"
+        transform_type: "passthrough"
+      
+      # Default route
+      - name: service-not-found
+        description: "Handle unknown services"
+        is_default: true
+        endpoint: "api-gateway"
+        transform_type: "passthrough"
+    
+    default_endpoint: "api-gateway"
+    enable_fallback: true

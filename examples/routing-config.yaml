@@ -1,0 +1,133 @@
+# Example routing configuration
+version: "1.0"
+routes:
+  # Route 1: User registration - transforms user data
+  - name: user-registration
+    description: "Route user registration requests to user service"
+    match_field: "metadata.type"
+    match_value: "user.register"
+    priority: 10
+    endpoint: "user-service"
+    method: "POST"
+    transform_type: "jq"
+    transform: |
+      {
+        "username": .payload.email | split("@")[0],
+        "email": .payload.email,
+        "full_name": .payload.name,
+        "metadata": {
+          "source": "queue",
+          "correlation_id": .correlation_id
+        }
+      }
+    header_mappings:
+      X-Request-ID: "correlation_id"
+      X-Source: "metadata.source"
+    timeout: 30
+
+  # Route 2: Order processing - complex transformation
+  - name: order-processing
+    description: "Process orders with item transformation"
+    match_field: "metadata.type"
+    match_value: "order.create"
+    priority: 10
+    endpoint: "order-service"
+    method: "POST"
+    transform_type: "jq"
+    transform: |
+      {
+        "order_id": .payload.order_id,
+        "customer_id": .payload.customer.id,
+        "items": [.payload.items[] | {
+          "product_id": .sku,
+          "quantity": .qty,
+          "price": .unit_price
+        }],
+        "total": (.payload.items | map(.qty * .unit_price) | add),
+        "currency": .payload.currency // "USD"
+      }
+    header_mappings:
+      X-Order-ID: "payload.order_id"
+      X-Customer-ID: "payload.customer.id"
+
+  # Route 3: Notification - template based
+  - name: notification
+    description: "Send notifications via notification service"
+    match_field: "metadata.type"
+    match_pattern: "^notification\\."
+    priority: 5
+    endpoint: "notification-service"
+    transform_type: "template"
+    transform: |
+      {
+        "recipient": "{{payload.user.email}}",
+        "subject": "{{payload.subject}}",
+        "body": "{{payload.message}}",
+        "template_id": "{{metadata.template}}",
+        "metadata": {
+          "correlation_id": "{{correlation_id}}"
+        }
+      }
+
+  # Route 4: Analytics - JSONPath extraction
+  - name: analytics
+    description: "Extract analytics data"
+    match_field: "metadata.type"
+    match_value: "analytics.track"
+    priority: 5
+    endpoint: "analytics-service"
+    transform_type: "jsonpath"
+    transform: "$.payload.event"
+    header_mappings:
+      X-Event-Type: "payload.event.type"
+      X-User-ID: "payload.event.user_id"
+
+  # Route 5: Session-based routing for legacy app
+  - name: legacy-app-session
+    description: "Route to legacy app with session affinity"
+    match_field: "metadata.type"
+    match_value: "legacy.request"
+    priority: 8
+    endpoint: "legacy-service"
+    method: "POST"
+    transform_type: "passthrough"
+    header_mappings:
+      X-Session-ID: "metadata.session_id"
+      X-User-ID: "metadata.user_id"
+    timeout: 60
+    max_retries: 1
+
+  # Route 6: Payment processing with query params
+  - name: payment
+    description: "Process payments"
+    match_field: "payload.action"
+    match_value: "payment"
+    priority: 10
+    endpoint: "payment-service"
+    method: "POST"
+    transform_type: "jq"
+    transform: |
+      {
+        "amount": .payload.amount,
+        "currency": .payload.currency,
+        "payment_method": .payload.method,
+        "customer": {
+          "id": .payload.customer_id,
+          "email": .payload.customer_email
+        }
+      }
+    query_params:
+      idempotency_key: "correlation_id"
+    header_mappings:
+      X-Payment-Provider: "metadata.provider"
+
+  # Default route - passthrough everything else
+  - name: default
+    description: "Default route for unmatched messages"
+    is_default: true
+    endpoint: "default-service"
+    transform_type: "passthrough"
+
+# Global settings
+default_endpoint: "default-service"
+enable_fallback: true

@@ -1,0 +1,67 @@
+# OpenHQM Starter Routes ConfigMap
+# A simple, beginner-friendly routing configuration
+# Can be imported directly into OpenHQM Router Manager for editing
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openhqm-starter-routes
+  namespace: default
+  labels:
+    app: openhqm
+    component: router
+    environment: development
+  annotations:
+    description: "Starter routing configuration for OpenHQM"
+    openhqm.io/version: "1.0"
+data:
+  routing.yaml: |
+    version: "1.0"
+    routes:
+      # Simple user registration route
+      - name: user-registration
+        description: "Handle user registration requests"
+        match_field: "metadata.type"
+        match_value: "user.register"
+        priority: 10
+        endpoint: "user-service"
+        method: "POST"
+        transform_type: "jq"
+        transform: |
+          {
+            "username": .payload.email | split("@")[0],
+            "email": .payload.email,
+            "name": .payload.name
+          }
+        timeout: 30
+      
+      # Simple order route
+      - name: order-create
+        description: "Create new orders"
+        match_field: "metadata.type"
+        match_value: "order.create"
+        priority: 10
+        endpoint: "order-service"
+        method: "POST"
+        transform_type: "passthrough"
+        timeout: 60
+      
+      # Notification route with pattern matching
+      - name: notifications
+        description: "Handle all notification types"
+        match_field: "metadata.type"
+        match_pattern: "^notification\\."
+        priority: 5
+        endpoint: "notification-service"
+        method: "POST"
+        transform_type: "passthrough"
+      
+      # Default fallback route
+      - name: default-route
+        description: "Default route for unmatched messages"
+        is_default: true
+        endpoint: "default-service"
+        transform_type: "passthrough"
+    
+    default_endpoint: "default-service"
+    enable_fallback: true

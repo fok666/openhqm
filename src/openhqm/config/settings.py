@@ -5,6 +5,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from openhqm.partitioning.models import PartitionConfig
+from openhqm.routing.models import RouteConfig
+
 
 class ServerSettings(BaseSettings):
     """HTTP server configuration."""
@@ -153,6 +156,18 @@ class MonitoringSettings(BaseSettings):
     log_format: Literal["json", "text"] = Field(default="json", description="Log format")
 
 
+class RoutingSettings(BaseSettings):
+    """Routing configuration."""
+
+    enabled: bool = Field(default=False, description="Enable routing engine")
+    config_path: str | None = Field(
+        default=None, description="Path to routing config file (YAML/JSON)"
+    )
+    config_dict: dict[str, Any] | None = Field(
+        default=None, description="Inline routing configuration"
+    )
+
+
 class Settings(BaseSettings):
     """Main application settings."""
 
@@ -170,6 +185,8 @@ class Settings(BaseSettings):
     proxy: ProxySettings = Field(default_factory=ProxySettings)
     cache: CacheSettings = Field(default_factory=CacheSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
+    routing: RoutingSettings = Field(default_factory=RoutingSettings)
+    partitioning: PartitionConfig = Field(default_factory=PartitionConfig)
 
 
 # Global settings instance
