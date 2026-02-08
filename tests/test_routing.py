@@ -18,12 +18,12 @@ def test_passthrough_transform():
         ]
     )
     engine = RoutingEngine(config)
-    
+
     message = {
         "correlation_id": "test-123",
         "payload": {"foo": "bar"},
     }
-    
+
     result = engine.route(message)
     assert result.endpoint == "test-service"
     assert result.payload == {"foo": "bar"}
@@ -42,12 +42,12 @@ def test_template_transform():
         ]
     )
     engine = RoutingEngine(config)
-    
+
     message = {
         "correlation_id": "test-123",
         "payload": {"username": "alice"},
     }
-    
+
     result = engine.route(message)
     assert result.payload == {"user": "alice", "id": "test-123"}
 
@@ -73,13 +73,13 @@ def test_route_matching_by_value():
         ]
     )
     engine = RoutingEngine(config)
-    
+
     message = {
         "correlation_id": "test-123",
         "payload": {},
         "metadata": {"type": "user"},
     }
-    
+
     result = engine.route(message)
     assert result.endpoint == "user-service"
 
@@ -97,13 +97,13 @@ def test_route_matching_by_pattern():
         ]
     )
     engine = RoutingEngine(config)
-    
+
     message = {
         "correlation_id": "test-123",
         "payload": {},
         "metadata": {"type": "notification.email"},
     }
-    
+
     result = engine.route(message)
     assert result.endpoint == "notification-service"
 
@@ -120,13 +120,13 @@ def test_default_route():
         ]
     )
     engine = RoutingEngine(config)
-    
+
     message = {
         "correlation_id": "test-123",
         "payload": {},
         "metadata": {"type": "unknown"},
     }
-    
+
     result = engine.route(message)
     assert result.endpoint == "default-service"
 
@@ -146,12 +146,12 @@ def test_header_mappings():
         ]
     )
     engine = RoutingEngine(config)
-    
+
     message = {
         "correlation_id": "test-123",
         "payload": {"user_id": "user-456"},
     }
-    
+
     result = engine.route(message)
     assert result.headers == {
         "X-User-ID": "user-456",
@@ -174,13 +174,13 @@ def test_query_params():
         ]
     )
     engine = RoutingEngine(config)
-    
+
     message = {
         "correlation_id": "test-123",
         "payload": {"username": "alice"},
         "metadata": {"session_id": "sess-789"},
     }
-    
+
     result = engine.route(message)
     assert result.query_params == {
         "user": "alice",
@@ -209,13 +209,13 @@ def test_priority_based_routing():
         ]
     )
     engine = RoutingEngine(config)
-    
+
     message = {
         "correlation_id": "test-123",
         "payload": {},
         "metadata": {"type": "test"},
     }
-    
+
     result = engine.route(message)
     # Higher priority should match first
     assert result.endpoint == "high-service"
