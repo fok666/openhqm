@@ -8,6 +8,8 @@ import structlog
 
 from openhqm.config.settings import EndpointConfig, settings
 from openhqm.exceptions import ConfigurationError, ProcessingError
+from openhqm.routing.engine import RoutingEngine
+from openhqm.partitioning.manager import PartitionManager
 
 logger = structlog.get_logger(__name__)
 
@@ -15,9 +17,43 @@ logger = structlog.get_logger(__name__)
 class MessageProcessor:
     """Process messages by forwarding to configured endpoints as reverse proxy."""
 
-    def __init__(self):
-        """Initialize the processor."""
+    def __init__(self, worker_id: str | None = None):
+        """Initialize the processor.
+        
+        Args:
+            worker_id: Unique worker identifier for partitioning
+        """
         self._session: aiohttp.ClientSession | None = None
+        self._routing_engine: RoutingEngine | None = None
+        self._partition_manager: PartitionManager | None = None
+        
+        # Initialize routing  and cleanup resources."""
+        if self._session and not self._session.closed:
+            await self._session.close()
+        
+        # Cleanup expired sessions if partitioning is enabled
+        if self._partition_manager:
+            self._partition_manager.cleanup_expired_sessions()
+        
+        # Initialize partition manager if enabled
+        if settings.partitioning.enabled and worker_id:
+            self._partition_manager = PartitionManager(settings.partitioning, worker_id)
+            logger.info("Partition manager initialized", worker_id=worker_id)
+
+    def _init_routing_engine(self):
+        """Initialize routing engine from configuration."""
+        try:
+            if settings.routing.config_path:
+                self._routing_engine = RoutingEngine.from_file(settings.routing.config_path)
+                logger.info("Routing engine loaded from file", path=settings.routing.config_path)
+            elif settings.routing.config_dict:
+                self._routing_engine = RoutingEngine.from_dict(settings.routing.config_dict)
+                logger.info("Routing engine loaded from inline config")
+            else:
+                logger.warning("Routing enabled but no configuration provided")
+        except Exception as e:
+            logger.error("Failed to initialize routing engine", error=str(e))
+            raise ConfigurationError(f"Routing initialization failed: {e}") from e
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create HTTP session."""
@@ -98,32 +134,92 @@ class MessageProcessor:
             forward_list = settings.proxy.forward_headers
             strip_list = settings.proxy.strip_headers
 
-            for key, value in request_headers.items():
-                # Check if header should be forwarded
-                if key in forward_list or "*" in forward_list:
-                    # Check if header should be stripped
-                    if key not in strip_list:
-                        headers[key] = value
+        full_message: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], int, dict[str, str]]:
+        """
+        Process message by forwarding to configured endpoint.
 
-        return headers
+        Args:
+            payload: Request payload (will be sent as JSON body)
+            metadata: Request metadata (contains endpoint, method overrides)
+            headers: Headers to forward from original request
+            full_message: Complete queue message for routing/partitioning
 
-    def _get_endpoint_config(self, endpoint_name: str | None = None) -> EndpointConfig:
-        """Get endpoint configuration by name or default."""
-        if not settings.proxy.enabled:
-            return None  # Allow fallback to example processing
+        Returns:
+            Tuple of (response_body, status_code, response_headers)
 
-        # Use named endpoint if specified
-        if endpoint_name:
-            if endpoint_name not in settings.proxy.endpoints:
-                raise ConfigurationError(f"Endpoint '{endpoint_name}' not found in configuration")
-            return settings.proxy.endpoints[endpoint_name]
-
-        # Use default endpoint
-        if settings.proxy.default_endpoint:
-            if settings.proxy.default_endpoint in settings.proxy.endpoints:
-                return settings.proxy.endpoints[settings.proxy.default_endpoint]
-            else:
-                # Create config from default URL
+        Raises:
+            ConfigurationError: If endpoint configuration is invalid
+            ProcessingError: If the request fails
+        """
+        metadata = metadata or {}
+        full_message = full_message or {"payload": payload, "metadata": metadata}
+        
+        # Check if partitioning is enabled and if we should process this message
+        if self._partition_manager:
+            if not self._partition_manager.should_process_message(full_message):
+                logger.info(
+                    "Message skipped due to partition assignment",
+                    correlation_id=full_message.get("correlation_id"),
+                    partition_id=self._partition_manager.get_partition_for_message(full_message),
+                )
+                raise ProcessingError("Message assigned to different partition")
+            
+            # Track session activity
+            self._partition_manager.track_session(full_message)
+        
+        # Use routing engine if enabled
+        if self._routing_engine:
+            routing_result = self._routing_engine.route(full_message)
+            
+            endpoint_name = routing_result.endpoint
+        
+        # Build URL with query params if provided
+        url = endpoint_config.url
+        query_params = metadata.get("query_params")
+        if query_params:
+            from urllib.parse import urlencode
+            query_string = urlencode(query_params)
+            url = f"{url}?{query_string}"
+            method = routing_result.method
+            payload = routing_result.payload
+            
+            # Merge routing headers with request headers
+            if routing_result.headers:
+                headers = headers or {}
+                headers.update(routing_result.headers)
+            
+            # Override metadata with routing results
+            metadata = metadata.copy()
+            metadata["endpoint"] = endpoint_name
+            if routing_result.timeout:
+                metadata["timeout"] = routing_result.timeout
+            if routing_result.max_retries:
+                metadata["max_retries"] = routing_result.max_retries
+            
+            # Add query params to metadata for URL construction
+            if routing_result.query_params:
+                metadata["query_params"] = routing_result.query_params
+            
+            logger.info(
+                "Message routed",
+                route_name=routing_result.route_name,
+                endpoint=endpoint_name,
+                method=method,
+            )
+        else:
+            endpoint_name = metadata.get("endpoint")
+                return settings.proxy.endpoints[endpoint_name]
+Get timeout from metadata or endpoint config
+            timeout_seconds = metadata.get("timeout") or endpoint_config.timeout
+            
+            # Make the request
+            async with session.request(
+                method=http_method,
+                url=url,
+                json=payload,
+                headers=merged_headers,
+                timeout=aiohttp.ClientTimeout(total=timeout_seconds
                 return EndpointConfig(url=settings.proxy.default_endpoint)
 
         # No endpoint specified
@@ -156,6 +252,26 @@ class MessageProcessor:
 
         logger.info(
             "Proxying request",
+    
+    def set_partition_assignments(self, worker_count: int, worker_index: int):
+        """Set partition assignments for this worker.
+        
+        Args:
+            worker_count: Total number of workers
+            worker_index: This worker's index (0-based)
+        """
+        if self._partition_manager:
+            self._partition_manager.assign_worker_partitions(worker_count, worker_index)
+    
+    def get_partition_stats(self) -> dict[str, Any] | None:
+        """Get partition statistics.
+        
+        Returns:
+            Dict with partition stats or None if partitioning disabled
+        """
+        if self._partition_manager:
+            return self._partition_manager.get_session_stats()
+        return None
             endpoint=endpoint_name,
             method=method,
             payload_size=len(str(payload)),

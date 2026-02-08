@@ -1,9 +1,9 @@
 # Software Design Document (SDD)
 ## OpenHQM - HTTP Queue Message Handler
 
-**Version:** 1.0
-**Date:** February 7, 2026
-**Status:** Initial Design
+**Version:** 1.1
+**Date:** February 8, 2026
+**Status:** Updated with Routing and Partitioning
 
 ---
 
@@ -12,14 +12,16 @@
 OpenHQM is an asynchronous HTTP request processing system that decouples request handling from response delivery using message queues. It provides a scalable architecture for handling long-running operations without blocking HTTP connections.
 
 ### 1.1 Purpose
-Enable asynchronous HTTP request processing through a queue-based worker architecture, allowing clients to submit requests and receive responses without maintaining persistent connections.
+Enable asynchronous HTTP request processing through a queue-based worker architecture, allowing clients to submit requests and receive responses without maintaining persistent connections. Now enhanced with **routing capabilities** for dynamic message transformation and **partitioning** for session-aware processing.
 
 ### 1.2 Scope
 - HTTP API listener for request ingestion
-- Message queue integration (Kafka/SQS/Redis)
+- Message queue integration (Kafka/SQS/Redis/Azure/GCP/MQTT)
 - Worker pool for asynchronous processing
 - Response queue and delivery mechanism
 - Request correlation and tracking
+- **Routing engine with JQ/JSONPath transforms**
+- **Partitioning with session affinity**
 - **Sidecar/Envoy Pattern**: Deploy as Kubernetes sidecar to add async queue capabilities to legacy HTTP workloads
 
 ---
@@ -126,15 +128,42 @@ flowchart TD
 
 #### 3.2.3 Worker Pool
 - **Technology**: Python with asyncio
-- **Responsibilities**:
-  - Consume messages from request queue
-  - Process business logic
+- **Apply routing and transformation logic
+  - Manage partition assignments for session affinity
+  - Process business logic or forward to endpoints
   - Handle errors and retries
   - Publish results to response queue
 - **Configuration**:
   - Configurable worker count
   - Graceful shutdown handling
   - Dead letter queue for failed messages
+  - Partition assignment and rebalancing
+
+#### 3.2.4 Routing Engine
+- **Technology**: Python with pyjq (JQ) and jsonpath-ng
+- **Responsibilities**:
+  - Match messages to routes based on field values or patterns
+  - Transform payloads using JQ, JSONPath, or templates
+  - Map message fields to HTTP headers and query parameters
+  - Select target endpoints dynamically
+  - Override timeouts and retry settings per route
+- **Configuration**:
+  - YAML or JSON route configuration files
+  - Kubernetes ConfigMap support
+  - Priority-based route evaluation
+  - Fallback to default endpoint
+
+#### 3.2.5 Partition Manager
+- **Technology**: Python with consistent hashing
+- **Responsibilities**:
+  - Assign partitions to workers for session affinity
+  - Track active sessions with TTL
+  - Ensure messages with same partition key go to same worker
+  - Support multiple partitioning strategies (hash, sticky, round-robin)
+  - Rebalance on worker scale changes
+- **Use Case**: Enable horizontal scaling for legacy apps lacking session management
+
+#### 3.2.6etter queue for failed messages
 
 #### 3.2.4 Response Handler
 - **Technology**: Integrated with HTTP Listener
@@ -148,9 +177,217 @@ flowchart TD
 
 ## 4. Detailed Design
 
-### 4.1 Data Models
+### 4.1 Routing and Transformation
 
-#### 4.1.1 Request Model
+#### 4.1.1 Routing Engine
+
+The routing engine enables dynamic message transformation and endpoint selection based on message content.
+
+**Features:**
+- **Multiple Transform Types**: JQ, JSONPath, Template, Passthrough
+- **Flexible Matching**: Field values, regex patterns, priority-based
+- **Header/Query Mapping**: Map message fields to HTTP headers and query parameters
+- **Per-Route Overrides**: Timeouts, retries, HTTP methods
+
+**Configuration Example:**
+```yaml
+version: "1.0"
+routes:
+  - name: user-registration
+    match_field: "metadata.type"
+    match_value: "user.register"
+    priority: 10
+    endpoint: "user-service"
+    transform_type: "jq"
+    transform: |
+      {
+        "username": .payload.email | split("@")[0],
+        "email": .payload.email,
+        "full_name": .payload.name
+      }
+    header_mappings:
+      X-Request-ID: "correlation_id"
+```
+
+**Transform Types:**
+
+1. **JQ Transform**: Complex JSON transformations
+   ```jq
+   {
+     "user_id": .payload.user.id,
+     "items": [.payload.cart.items[] | {
+       "sku": .product_id,
+       "qty": .quantity
+     }]
+   }
+   ```
+
+2. **JSONPath**: Extract specific fields
+   ```
+   $.payload.event.data
+   ```
+
+3. **Template**: Simple field substitution
+   ```json
+   {
+     "recipient": "{{payload.user.email}}",
+     "subject": "{{payload.subject}}"
+   }
+   ```
+
+4. **Passthrough**: No transformation (forward as-is)
+
+#### 4.1.2 Route Matching
+
+Routes are evaluated in **priority order**:
+1. Sort routes by priority (highest first)
+2. Check enabled routes only
+3. Match field values or regex patterns
+4. First match wins
+5. Fallback to default route if configured
+
+**Matching Criteria:**
+- `match_field`: Dot-notation path to field (e.g., "metadata.type")
+- `match_value`: Exact string match
+- `match_pattern`: Regex pattern
+- `is_default`: Matches all messages (lowest priority)
+
+### 4.2 Partitioning and Session Affinity
+
+#### 4.2.1 Partition Manager
+
+The partition manager ensures messages with the same partition key are always processed by the same worker instance, enabling session management for legacy applications.
+
+**Features:**
+- **Sticky Sessions**: Consistent partition assignment based on key
+- **Multiple Strategies**: HASH, STICKY, KEY, ROUND_ROBIN
+- **Worker Coordination**: Automatic partition distribution
+- **Session Tracking**: TTL-based session cleanup
+- **Rebalancing**: On worker scale up/down
+
+**Configuration:**
+```bash
+OPENHQM_PARTITIONING__ENABLED=true
+OPENHQM_PARTITIONING__PARTITION_COUNT=10
+OPENHQM_PARTITIONING__STRATEGY=sticky
+OPENHQM_PARTITIONING__PARTITION_KEY_FIELD=metadata.session_id
+OPENHQM_PARTITIONING__STICKY_SESSION_TTL=3600
+```
+
+**Partition Assignment:**
+
+With 10 partitions and 5 workers:
+```
+Worker 0: Partitions [0, 5]
+Worker 1: Partitions [1, 6]
+Worker 2: Partitions [2, 7]
+Worker 3: Partitions [3, 8]
+Worker 4: Partitions [4, 9]
+```
+
+Each message's partition is determined by:
+```python
+partition_id = hash(partition_key) % partition_count
+```
+
+**Message Flow:**
+1. Extract partition key from message (e.g., `metadata.session_id`)
+2. Calculate partition ID using consistent hashing
+3. Check if this worker owns the partition
+4. Process if owned, skip if not
+5. Track session activity for sticky sessions
+
+#### 4.2.2 Use Cases
+
+**Legacy Application Horizontal Scaling:**
+- Legacy app has in-memory sessions
+- Can't scale horizontally without state sharing
+- OpenHQM ensures same session → same worker
+- Worker forwards to legacy app instance
+- Legacy app maintains local session state
+
+**Multi-Tenant Workloads:**
+- Partition by tenant ID
+- Isolate tenant workloads
+- Predictable resource allocation
+- Per-tenant rate limiting
+
+**Stateful Processing:**
+- Maintain worker-local state
+- Avoid distributed state management
+- Reduce latency for session-bound operations
+
+### 4.3 Data Models
+
+#### 4.3.1 Route Model
+```python
+class Route(BaseModel):
+    name: str
+    match_field: str | None
+    match_value: str | None
+    match_pattern: str | None
+    is_default: bool = False
+    priority: int = 0
+    endpoint: str
+    transform_type: TransformType
+    transform: str | None
+    method: str | None
+    header_mappings: dict[str, str] | None
+    query_params: dict[str, str] | None
+    timeout: int | None
+    max_retries: int | None
+```
+
+#### 4.3.2 Partition Config
+```python
+class PartitionConfig(BaseModel):
+    enabled: bool = False
+    strategy: PartitionStrategy = PartitionStrategy.STICKY
+    partition_count: int = 10
+    partition_key_field: str = "metadata.partition_key"
+    session_key_field: str = "metadata.session_id"
+    sticky_session_ttl: int = 3600
+```
+
+### 4.4 Request Flow with Routing and Partitioning
+
+1. **Client Submits Request**
+   - HTTP POST to `/api/v1/submit`
+   - Includes payload, metadata, headers
+   
+2. **HTTP Listener Processing**
+   - Generate correlation_id
+   - Publish to request queue
+   - Return correlation_id to client
+   
+3. **Worker Receives Message**
+   - Check partition assignment (if enabled)
+   - Skip if not owned by this worker
+   - Track session activity
+   
+4. **Routing Engine**
+   - Match message to route
+   - Apply transformation (JQ/JSONPath/Template)
+   - Map fields to headers/query params
+   - Select target endpoint
+   
+5. **Worker Forwards Request**
+   - Build HTTP request from routing result
+   - Forward to configured endpoint
+   - Capture response
+   
+6. **Response Handling**
+   - Publish to response queue
+   - Store in cache
+   - Client polls for result
+
+---
+
+## 5. Detailed Design (Continued)
+
+### 5.1 Data Models
+
+#### 5.1.1 Request Model
 ```python
 class Request(BaseModel):
     correlation_id: str
@@ -160,7 +397,7 @@ class Request(BaseModel):
     status: RequestStatus
 ```
 
-#### 4.1.2 Response Model
+#### 5.1.2 Response Model
 ```python
 class Response(BaseModel):
     correlation_id: str
@@ -170,14 +407,14 @@ class Response(BaseModel):
     processing_time_ms: int
 ```
 
-#### 4.1.3 Request Status
+#### 5.1.3 Request Status
 - `PENDING`: Queued, not yet processed
 - `PROCESSING`: Being processed by worker
 - `COMPLETED`: Successfully processed
 - `FAILED`: Processing failed
 - `TIMEOUT`: Exceeded timeout limit
 
-### 4.2 Message Queue Abstraction
+### 5.2 Message Queue Abstraction
 
 ```python
 class MessageQueueInterface(ABC):
@@ -196,7 +433,7 @@ Implementations:
 - `KafkaQueue`: Using aiokafka
 - `SQSQueue`: Using boto3/aioboto3
 
-### 4.3 Request Flow
+### 5.3 Request Flow
 
 1. **Client Submits Request**
    - Client sends POST to `/api/v1/submit`
@@ -229,7 +466,7 @@ Implementations:
    - Return cached response if available
    - Return status if still processing
 
-### 4.4 Configuration Management
+### 5.4 Configuration Management
 
 ```yaml
 # config.yaml
@@ -264,14 +501,14 @@ monitoring:
   log_level: "INFO"
 ```
 
-### 4.5 Error Handling
+### 5.5 Error Handling
 
 - **Retry Logic**: Exponential backoff (1s, 2s, 4s)
 - **Dead Letter Queue**: Failed messages after max retries
 - **Circuit Breaker**: Prevent cascading failures
 - **Graceful Degradation**: Continue operating with partial failures
 
-### 4.6 Security Considerations
+### 5.6 Security Considerations
 
 - **Authentication**: API key or JWT token
 - **Rate Limiting**: Per client/IP rate limits
@@ -280,7 +517,7 @@ monitoring:
 
 ---
 
-## 5. Scalability & Performance
+## 6. Scalability & Performance
 
 ### 5.1 Horizontal Scaling
 - HTTP listeners: Multiple instances behind load balancer
@@ -301,7 +538,7 @@ monitoring:
 
 ---
 
-## 6. Technology Stack
+## 7. Technology Stack
 
 ### 6.1 Core Technologies
 - **Language**: Python 3.11+
@@ -338,7 +575,7 @@ monitoring:
 
 ---
 
-## 7. Development Guidelines
+## 8. Development Guidelines
 
 ### 7.1 Code Structure
 ```
@@ -402,7 +639,7 @@ openhqm/
 
 ---
 
-## 8. Deployment
+## 9. Deployment
 
 ### 8.1 Container Deployment
 
@@ -455,7 +692,7 @@ Docker automatically selects the correct architecture for your platform.
 
 ---
 
-## 9. API Specification
+## 10. API Specification
 
 ### 9.1 Submit Request
 ```
@@ -511,7 +748,7 @@ Response (200 OK):
 
 ---
 
-## 10. Future Enhancements
+## 11. Future Enhancements
 
 1. **WebSocket Support**: Real-time response delivery
 2. **Batch Processing**: Submit multiple requests
@@ -524,7 +761,7 @@ Response (200 OK):
 
 ---
 
-## 11. Kubernetes Sidecar Pattern
+## 12. Kubernetes Sidecar Pattern
 
 ### 11.1 Overview
 
@@ -708,34 +945,50 @@ proxy:
 
 ---
 
-## 12. Appendix
+## 13. Appendix
 
 ### 12.1 Glossary
 - **Correlation ID**: Unique identifier linking request to response
 - **Dead Letter Queue**: Queue for messages that failed processing
 - **Idempotency**: Ability to process same request multiple times safely
+- **Routing**: Dynamic message transformation and endpoint selection
+- **Partitioning**: Distributing messages to workers based on partition key
+- **Session Affinity**: Ensuring messages from same session go to same worker
+- **JQ Transform**: JSON transformation using jq query language
+- **JSONPath**: JSON query language for extracting data
 
-### 12.2 References
+### 13.2 References
 - FastAPI Documentation: https://fastapi.tiangolo.com/
 - Redis Streams: https://redis.io/docs/data-types/streams/
 - Kafka Documentation: https://kafka.apache.org/documentation/
 - AWS SQS: https://docs.aws.amazon.com/sqs/
 - Docker Buildx: https://docs.docker.com/buildx/
 - Multi-platform Images: https://docs.docker.com/build/building/multi-platform/
+- JQ Manual: https://jqlang.github.io/jq/manual/
+- JSONPath: https://goessner.net/articles/JsonPath/
+- pyjq: https://github.com/doloopwhile/pyjq
+- jsonpath-ng: https://github.com/h2non/jsonpath-ng
 
-### 12.3 Internal Documentation
+### 13.3 Internal Documentation
 - **Architecture & Patterns**: [docs/COMPOSABLE_PATTERNS.md](docs/COMPOSABLE_PATTERNS.md)
 - **Queue Backends**: [docs/QUEUE_BACKENDS.md](docs/QUEUE_BACKENDS.md)
 - **Kubernetes Sidecar**: [docs/KUBERNETES_SIDECAR.md](docs/KUBERNETES_SIDECAR.md)
 - **Proxy Mode**: [docs/PROXY_MODE.md](docs/PROXY_MODE.md)
+- **Routing and Partitioning**: [docs/ROUTING_PARTITIONING.md](docs/ROUTING_PARTITIONING.md)
 - **Docker Images**: [docs/DOCKER_IMAGES.md](docs/DOCKER_IMAGES.md)
 - **Multi-Arch Builds**: [docs/MULTI_ARCH_BUILD.md](docs/MULTI_ARCH_BUILD.md)
 - **Quick Reference**: [docs/QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md)
 - **Complete Index**: [docs/README.md](docs/README.md)
 
-### 12.4 Change Log
+### 13.4 Change Log
 - 2026-02-07: Initial version 1.0
 - 2026-02-07: Added Section 2 - Composable Patterns (HTTP→Queue, Queue→HTTP)
 - 2026-02-07: Added Section 6.3 - Multi-Architecture Support
 - 2026-02-07: Enhanced Section 8 - Container Deployment with multi-arch details
 - 2026-02-07: Reorganized documentation into docs/ folder
+- 2026-02-08: **Added Section 4 - Routing and Partitioning**
+  - Routing engine with JQ, JSONPath, and template transforms
+  - Partition manager with session affinity
+  - Updated worker implementation with partition support
+  - Added routing configuration examples
+  - Kubernetes ConfigMap integration
