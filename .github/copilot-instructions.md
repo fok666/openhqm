@@ -398,6 +398,7 @@ When creating new files:
 - Use type hints everywhere
 - Document why, not what (code should be self-explanatory)
 - Skip comprehensive summaries and summary documents creation steps
+- Implement small incremental changes and verify your steps along the way
 - Always test locally before pushing changes
 - Push to new branches for review, don't commit directly to main
 - Use pull requests for code review and discussion
