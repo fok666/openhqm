@@ -1,0 +1,195 @@
+# OpenHQM Production Routes ConfigMap
+# Production-ready routing configuration with comprehensive features
+# Can be imported directly into OpenHQM Router Manager for editing
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openhqm-production-routes
+  namespace: production
+  labels:
+    app: openhqm
+    component: router
+    environment: production
+    version: "1.0"
+  annotations:
+    description: "Production routing configuration with multiple patterns"
+    openhqm.io/version: "1.0"
+    openhqm.io/managed-by: "router-manager"
+data:
+  routing.yaml: |
+    version: "1.0"
+    routes:
+      # High-priority orders
+      - name: high-priority-orders
+        description: "Route high-priority orders to dedicated service"
+        match_field: "payload.priority"
+        match_value: "high"
+        priority: 100
+        endpoint: "order-service-high-priority"
+        method: "POST"
+        transform_type: "jq"
+        transform: |
+          {
+            "orderId": .payload.orderId,
+            "priority": "HIGH",
+            "customer": .payload.customer,
+            "items": .payload.items,
+            "processedAt": now | todate
+          }
+        header_mappings:
+          X-Priority: "payload.priority"
+          X-Order-ID: "payload.orderId"
+        timeout: 30
+        max_retries: 3
+      
+      # Standard orders
+      - name: standard-orders
+        description: "Route standard orders"
+        match_field: "metadata.type"
+        match_value: "order.create"
+        priority: 50
+        endpoint: "order-service"
+        method: "POST"
+        transform_type: "jq"
+        transform: |
+          {
+            "orderId": .payload.orderId,
+            "customer": .payload.customer,
+            "items": .payload.items,
+            "total": (.payload.items | map(.price * .quantity) | add)
+          }
+        header_mappings:
+          X-Order-ID: "payload.orderId"
+          X-Customer-ID: "payload.customer.id"
+        timeout: 60
+      
+      # Customer profile updates
+      - name: customer-profile-update
+        description: "Update customer profiles"
+        match_field: "metadata.type"
+        match_value: "customer.update"
+        priority: 50
+        endpoint: "customer-service"
+        method: "PUT"
+        transform_type: "jq"
+        transform: |
+          {
+            "customerId": .payload.customerId,
+            "updates": .payload.updates,
+            "updatedBy": .metadata.userId,
+            "timestamp": now | todate
+          }
+        header_mappings:
+          X-Customer-ID: "payload.customerId"
+          X-Updated-By: "metadata.userId"
+      
+      # Payment processing
+      - name: payment-processing
+        description: "Process payments with validation"
+        match_field: "metadata.type"
+        match_value: "payment.process"
+        priority: 80
+        endpoint: "payment-service"
+        method: "POST"
+        transform_type: "jq"
+        transform: |
+          {
+            "paymentId": .payload.paymentId,
+            "amount": .payload.amount,
+            "currency": .payload.currency,
+            "method": .payload.method,
+            "customerId": .payload.customerId,
+            "orderId": .payload.orderId
+          }
+        query_params:
+          idempotency_key: "correlation_id"
+        header_mappings:
+          X-Payment-ID: "payload.paymentId"
+          X-Idempotency-Key: "correlation_id"
+        timeout: 45
+        max_retries: 2
+      
+      # Email notifications
+      - name: email-notifications
+        description: "Send email notifications"
+        match_field: "metadata.type"
+        match_value: "notification.email"
+        priority: 30
+        endpoint: "notification-service"
+        method: "POST"
+        transform_type: "template"
+        transform: |
+          {
+            "to": "{{payload.recipient}}",
+            "subject": "{{payload.subject}}",
+            "body": "{{payload.body}}",
+            "templateId": "{{metadata.templateId}}"
+          }
+      
+      # SMS notifications
+      - name: sms-notifications
+        description: "Send SMS notifications"
+        match_field: "metadata.type"
+        match_value: "notification.sms"
+        priority: 30
+        endpoint: "sms-service"
+        method: "POST"
+        transform_type: "jq"
+        transform: |
+          {
+            "to": .payload.phoneNumber,
+            "message": .payload.message,
+            "priority": .metadata.priority // "normal"
+          }
+      
+      # Analytics events
+      - name: analytics-tracking
+        description: "Track analytics events"
+        match_field: "metadata.type"
+        match_pattern: "^analytics\\."
+        priority: 20
+        endpoint: "analytics-service"
+        method: "POST"
+        transform_type: "jsonpath"
+        transform: "$.payload.event"
+        header_mappings:
+          X-Event-Type: "payload.event.type"
+          X-User-ID: "payload.event.userId"
+      
+      # Webhook relay
+      - name: webhook-relay
+        description: "Relay webhooks to external systems"
+        match_field: "metadata.type"
+        match_value: "webhook.relay"
+        priority: 40
+        endpoint: "webhook-relay-service"
+        method: "POST"
+        transform_type: "passthrough"
+        timeout: 90
+      
+      # Legacy system integration
+      - name: legacy-integration
+        description: "Route to legacy system with session affinity"
+        match_field: "metadata.type"
+        match_value: "legacy.request"
+        priority: 60
+        endpoint: "legacy-service"
+        method: "POST"
+        transform_type: "passthrough"
+        header_mappings:
+          X-Session-ID: "metadata.sessionId"
+          X-User-ID: "metadata.userId"
+        timeout: 120
+        max_retries: 1
+      
+      # Default route
+      - name: default-handler
+        description: "Default handler for unmatched requests"
+        is_default: true
+        endpoint: "default-service"
+        method: "POST"
+        transform_type: "passthrough"
+    
+    default_endpoint: "default-service"
+    enable_fallback: true

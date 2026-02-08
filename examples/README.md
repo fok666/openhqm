@@ -4,10 +4,11 @@ This directory contains configuration examples and usage patterns for OpenHQM.
 
 ## 🎯 Quick Navigation
 
-| File | Description | Use With |
-|------|-------------|----------|
+| File/Folder | Description | Use With |
+|-------------|-------------|----------|
 | [routing-config.yaml](routing-config.yaml) | Production-ready routing rules | Workers, Sidecar |
 | [k8s-routing-configmap.yaml](k8s-routing-configmap.yaml) | Kubernetes ConfigMap deployment | K8s StatefulSet |
+| [configmaps/](configmaps/) | ⭐️ **Ready-to-import ConfigMaps** | Router Manager |
 | [proxy_example.py](proxy_example.py) | Python client example | API Integration |
 | [complete_workflow_example.py](complete_workflow_example.py) | End-to-end workflow demo | Testing, Learning |
 | [validate_routing_config.py](validate_routing_config.py) | Config validation script | CI/CD, Pre-deployment |
@@ -56,9 +57,17 @@ This directory contains configuration examples and usage patterns for OpenHQM.
   - Detect common configuration errors
   - **🔧 Use in CI/CD pipeline before deployment**
 
-### Kubernetes Deployment
+### Kubernetes ConfigMaps
 
-- **[k8s-routing-configmap.yaml](k8s-routing-configmap.yaml)** - Kubernetes deployment with routing
+- **[configmaps/](configmaps/)** - ⭐️ **Ready-to-import ConfigMap examples**
+  - **[starter-routes.yaml](configmaps/starter-routes.yaml)** - Simple 4-route starter config
+  - **[production-routes.yaml](configmaps/production-routes.yaml)** - Comprehensive 10-route production config
+  - **[microservices-routes.yaml](configmaps/microservices-routes.yaml)** - 6-route microservices config
+  - **Can be imported directly into Router Manager without modification**
+  - **✅ Validated by E2E tests**
+  - See [configmaps/README.md](configmaps/README.md) for details
+
+- **[k8s-routing-configmap.yaml](k8s-routing-configmap.yaml)** - Full Kubernetes deployment example
   - ConfigMap for routing configuration
   - StatefulSet deployment with partition support
   - Environment variable configuration
