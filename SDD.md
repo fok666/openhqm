@@ -58,7 +58,7 @@ These patterns are **orthogonal** - they can be used independently or combined:
 - Use for: Async reverse proxy, Kubernetes sidecar, load shedding
 - Configuration: `proxy.enabled = true`, HTTP listener enabled
 
-See [COMPOSABLE_PATTERNS.md](COMPOSABLE_PATTERNS.md) for detailed patterns, use cases, and configuration examples.
+See [COMPOSABLE_PATTERNS.md](docs/COMPOSABLE_PATTERNS.md) for detailed patterns, use cases, and configuration examples.
 
 ## 3. System Architecture
 
