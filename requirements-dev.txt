@@ -27,4 +27,4 @@ mkdocs-material==9.5.3
 locust==2.43.2
 
 # Type stubs
-types-redis==4.6.0.11
+types-redis==4.6.0.20241004
