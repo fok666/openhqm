@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from openhqm.partitioning.models import PartitionConfig
@@ -12,7 +12,7 @@ class ServerSettings(BaseSettings):
     """HTTP server configuration."""
 
     host: str = Field(default="0.0.0.0", description="Server host")
-    port: int = Field(default=8000, description="Server port")
+    port: int = Field(default=8000, description="Server port", ge=0, le=65535)
     workers: int = Field(default=4, description="Number of Uvicorn workers")
     reload: bool = Field(default=False, description="Enable auto-reload")
 
@@ -100,9 +100,9 @@ class WorkerSettings(BaseSettings):
 class EndpointConfig(BaseModel):
     """Configuration for a single endpoint."""
 
-    url: str = Field(..., description="Target endpoint URL")
+    url: str = Field(..., description="Target endpoint URL", min_length=1)
     method: str = Field(default="POST", description="HTTP method to use")
-    timeout: int = Field(default=300, description="Request timeout in seconds")
+    timeout: int = Field(default=300, description="Request timeout in seconds", ge=0)
     headers: dict[str, str] | None = Field(default=None, description="Static headers to include")
     auth_type: Literal["bearer", "basic", "api_key", "custom"] | None = Field(
         default=None, description="Authentication type"

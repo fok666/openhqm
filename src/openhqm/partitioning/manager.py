@@ -100,6 +100,22 @@ class PartitionManager:
             assigned_partitions=sorted(self._worker_partitions),
         )
 
+    def set_assigned_partitions(self, partitions: set[int]):
+        """Manually set which partitions this worker should process.
+
+        Args:
+            partitions: Set of partition IDs to assign to this worker
+        """
+        self._worker_partitions = set(partitions)
+        for partition_id in partitions:
+            self._partition_assignments[partition_id] = self.worker_id
+
+        logger.info(
+            "Worker partitions set",
+            worker_id=self.worker_id,
+            assigned_partitions=sorted(self._worker_partitions),
+        )
+
     def get_partition_key(self, message: dict[str, Any]) -> str | None:
         """Extract partition key from message.
 
@@ -235,6 +251,14 @@ class PartitionManager:
             "partition_ids": sorted(self._worker_partitions),
             "total_messages": sum(s.message_count for s in self._sessions.values()),
         }
+
+    def get_stats(self) -> dict[str, Any]:
+        """Get partition manager statistics (alias for get_session_stats).
+
+        Returns:
+            Dict with partition statistics
+        """
+        return self.get_session_stats()
 
     def get_partition_for_key(self, key: str) -> int:
         """Get partition ID for a specific key.

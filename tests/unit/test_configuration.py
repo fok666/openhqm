@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from openhqm.config.settings import (
     EndpointConfig,
+    MonitoringSettings,
     PartitionConfig,
     ProxySettings,
     QueueSettings,
@@ -223,12 +224,11 @@ class TestServerSettings:
 
     def test_server_settings_custom(self):
         """Test custom server configuration."""
-        settings = ServerSettings(host="127.0.0.1", port=8080, reload=True, log_level="DEBUG")
+        settings = ServerSettings(host="127.0.0.1", port=8080, reload=True)
 
         assert settings.host == "127.0.0.1"
         assert settings.port == 8080
         assert settings.reload is True
-        assert settings.log_level == "DEBUG"
 
 
 class TestFullSettings:
@@ -328,7 +328,7 @@ class TestConfigurationValidation:
     def test_invalid_log_level(self):
         """Test that invalid log level is handled."""
         # Should accept any string (will be validated at runtime)
-        settings = ServerSettings(log_level="INVALID")
+        settings = MonitoringSettings(log_level="INVALID")
         assert settings.log_level == "INVALID"
 
 

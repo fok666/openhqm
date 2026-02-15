@@ -67,8 +67,12 @@ class MessageProcessor:
         if self._partition_manager:
             self._partition_manager.cleanup_expired_sessions()
 
-    def _example_process(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Example processing logic for testing when proxy mode is disabled."""
+    def _example_process(self, payload: dict[str, Any]) -> tuple[dict[str, Any], int, dict[str, str]]:
+        """Example processing logic for testing when proxy mode is disabled.
+        
+        Returns:
+            Tuple of (response_body, status_code, response_headers)
+        """
         from datetime import datetime
 
         operation = payload.get("operation", "unknown")
@@ -85,10 +89,11 @@ class MessageProcessor:
         else:
             output = f"Unknown operation: {operation}"
 
-        return {
+        result = {
             "output": output,
             "processed_at": datetime.utcnow().isoformat(),
         }
+        return result, 200, {}
 
     def _prepare_auth_headers(self, endpoint_config: EndpointConfig) -> dict[str, str]:
         """Prepare authentication headers based on endpoint configuration."""

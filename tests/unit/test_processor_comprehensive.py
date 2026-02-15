@@ -345,7 +345,8 @@ async def test_set_partition_assignments():
         processor.set_partition_assignments(partitions)
 
         stats = processor.get_partition_stats()
-        assert stats["assigned_partitions"] == sorted(partitions)
+        assert stats["partition_ids"] == sorted(partitions)
+        assert stats["assigned_partitions"] == len(partitions)
 
 
 @pytest.mark.asyncio
