@@ -63,6 +63,11 @@ ci-checks: ## Run all CI checks locally (mimics GitHub Actions)
 	@chmod +x scripts/run-ci-checks.sh
 	@./scripts/run-ci-checks.sh
 
+ci-checks-fast: ## Run CI checks without integration tests (no external dependencies)
+	@echo "==> Running fast CI checks (unit tests only)..."
+	@chmod +x scripts/run-ci-checks.sh
+	@./scripts/run-ci-checks.sh --fast
+
 ci-checks-fix: ## Run CI checks with auto-fix
 	@echo "==> Running CI checks with auto-fix..."
 	@chmod +x scripts/run-ci-checks.sh

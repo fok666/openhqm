@@ -67,35 +67,60 @@ run_check() {
     fi
 }
 
-# 1. Check dependencies
+# 1. Check dependencies and activate virtual environment
 echo -e "${BLUE}1. Checking dependencies${NC}"
-if ! python3 -c "import ruff" 2>/dev/null; then
+
+# Activate virtual environment if it exists
+if [ -d "${PROJECT_ROOT}/.venv" ]; then
+    echo -e "${GREEN}Using virtual environment at .venv${NC}"
+    source "${PROJECT_ROOT}/.venv/bin/activate"
+    PYTHON_CMD="${PROJECT_ROOT}/.venv/bin/python3"
+else
+    echo -e "${YELLOW}No virtual environment found at .venv${NC}"
+    PYTHON_CMD="python3"
+fi
+
+# Check if ruff is available
+if ! $PYTHON_CMD -c "import ruff" 2>/dev/null; then
     echo -e "${YELLOW}Installing dependencies...${NC}"
-    python3 -m pip install -q -r requirements.txt -r requirements-dev.txt
+    $PYTHON_CMD -m pip install -q -r requirements.txt -r requirements-dev.txt
 fi
 echo ""
 
+# Determine command prefix based on venv
+if [ -d "${PROJECT_ROOT}/.venv" ]; then
+    RUFF="${PROJECT_ROOT}/.venv/bin/ruff"
+    MYPY="${PROJECT_ROOT}/.venv/bin/mypy"
+    BANDIT="${PROJECT_ROOT}/.venv/bin/bandit"
+    PYTEST="${PROJECT_ROOT}/.venv/bin/pytest"
+else
+    RUFF="ruff"
+    MYPY="mypy"
+    BANDIT="bandit"
+    PYTEST="pytest"
+fi
+
 # 2. Ruff linting
 if [ "$FIX_MODE" = true ]; then
-    run_check "Ruff lint (with fixes)" "ruff check src/ tests/ --fix"
+    run_check "Ruff lint (with fixes)" "$RUFF check src/ tests/ --fix"
 else
-    run_check "Ruff lint" "ruff check src/ tests/"
+    run_check "Ruff lint" "$RUFF check src/ tests/"
 fi
 
 # 3. Ruff formatting
 if [ "$FIX_MODE" = true ]; then
-    run_check "Ruff format" "ruff format src/ tests/"
+    run_check "Ruff format" "$RUFF format src/ tests/"
 else
-    run_check "Ruff format check" "ruff format --check src/ tests/"
+    run_check "Ruff format check" "$RUFF format --check src/ tests/"
 fi
 
 # 4. Type checking (skip in fast mode)
 if [ "$FAST_MODE" = false ]; then
-    run_check "Mypy type checking" "mypy src/"
+    run_check "Mypy type checking" "$MYPY src/"
 fi
 
 # 5. Security checks
-run_check "Bandit security scan" "bandit -r src/ -q" || true  # Don't fail on security warnings
+run_check "Bandit security scan" "$BANDIT -r src/ -q" || true  # Don't fail on security warnings
 
 # 6. Unit tests
 echo -e "${BLUE}6. Running tests${NC}"
@@ -104,9 +129,9 @@ export OPENHQM_QUEUE__REDIS_URL="redis://localhost:6379"
 export OPENHQM_CACHE__REDIS_URL="redis://localhost:6379"
 
 if [ "$FAST_MODE" = true ]; then
-    run_check "Unit tests (fast)" "pytest tests/ -v -m 'not integration' --tb=short"
+    run_check "Unit tests (fast)" "$PYTEST tests/ -v -m 'not integration' --tb=short"
 else
-    run_check "All tests with coverage" "pytest tests/ -v --cov=src/openhqm --cov-report=term-missing --cov-report=html --tb=short"
+    run_check "All tests with coverage" "$PYTEST tests/ -v --cov=src/openhqm --cov-report=term-missing --cov-report=html --tb=short"
 fi
 
 # 7. Check for large files

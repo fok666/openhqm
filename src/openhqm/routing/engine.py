@@ -33,7 +33,7 @@ class RoutingEngine:
         self._jq_available = False
         if any(r.transform_type == TransformType.JQ for r in self._routes_sorted):
             try:
-                import pyjq
+                import pyjq  # type: ignore[import-not-found]
 
                 self._jq = pyjq
                 self._jq_available = True
@@ -123,7 +123,7 @@ class RoutingEngine:
             ProcessingError: If transform fails
         """
         try:
-            from jsonpath_ng import parse
+            from jsonpath_ng import parse  # type: ignore[import-not-found]
 
             jsonpath_expr = parse(expression)
             matches = [match.value for match in jsonpath_expr.find(data)]
@@ -228,7 +228,7 @@ class RoutingEngine:
         Returns:
             Dict of HTTP headers
         """
-        headers = {}
+        headers: dict[str, str] = {}
 
         if not route.header_mappings:
             return headers
@@ -251,7 +251,7 @@ class RoutingEngine:
         Returns:
             Dict of query parameters
         """
-        params = {}
+        params: dict[str, str] = {}
 
         if not route.query_params:
             return params
@@ -334,7 +334,7 @@ class RoutingEngine:
         """
         from pathlib import Path
 
-        import yaml
+        import yaml  # type: ignore[import-untyped]
 
         path = Path(file_path)
         if not path.exists():
