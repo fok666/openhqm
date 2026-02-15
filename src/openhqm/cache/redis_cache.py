@@ -132,5 +132,5 @@ class RedisCache(CacheInterface):
     async def close(self) -> None:
         """Close Redis connection."""
         if self.redis:
-            await self.redis.close()
+            await self.redis.aclose()
             logger.info("Closed Redis cache connection")
