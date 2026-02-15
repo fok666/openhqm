@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from openhqm.partitioning.models import PartitionConfig
-from openhqm.routing.models import RouteConfig
 
 
 class ServerSettings(BaseSettings):

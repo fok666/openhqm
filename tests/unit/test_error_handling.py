@@ -1,13 +1,12 @@
 """Error handling and edge case tests."""
 
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 import asyncio
+from unittest.mock import AsyncMock, patch
 
-from openhqm.exceptions import ConfigurationError, ProcessingError, FatalError, RetryableError
+import pytest
+
+from openhqm.exceptions import ConfigurationError, FatalError, ProcessingError, RetryableError
 from openhqm.worker.processor import MessageProcessor
-from openhqm.partitioning.manager import PartitionManager
-from openhqm.routing.engine import RoutingEngine
 
 
 class TestExceptionHandling:
@@ -35,7 +34,7 @@ class TestExceptionHandling:
             processor = MessageProcessor()
 
             with patch("aiohttp.ClientSession.request") as mock_request:
-                mock_request.side_effect = asyncio.TimeoutError()
+                mock_request.side_effect = TimeoutError()
 
                 with pytest.raises(ProcessingError, match="timeout"):
                     await processor.process({"data": "test"})
@@ -209,7 +208,7 @@ class TestEdgeCases:
     async def test_circular_reference_in_payload(self):
         """Test handling of circular references."""
         # JSON can't handle circular references, but test serialization
-        processor = MessageProcessor()
+        MessageProcessor()
 
         payload = {"a": {"b": {"c": {}}}}
         payload["a"]["b"]["c"]["circular"] = payload["a"]  # Create cycle

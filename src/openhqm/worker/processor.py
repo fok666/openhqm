@@ -8,8 +8,8 @@ import structlog
 
 from openhqm.config.settings import EndpointConfig, settings
 from openhqm.exceptions import ConfigurationError, ProcessingError
-from openhqm.routing.engine import RoutingEngine
 from openhqm.partitioning.manager import PartitionManager
+from openhqm.routing.engine import RoutingEngine
 
 logger = structlog.get_logger(__name__)
 
@@ -19,18 +19,18 @@ class MessageProcessor:
 
     def __init__(self, worker_id: str | None = None):
         """Initialize the processor.
-        
+
         Args:
             worker_id: Unique worker identifier for partitioning
         """
         self._session: aiohttp.ClientSession | None = None
         self._routing_engine: RoutingEngine | None = None
         self._partition_manager: PartitionManager | None = None
-        
+
         # Initialize routing engine if enabled
         if settings.routing.enabled:
             self._init_routing_engine()
-        
+
         # Initialize partition manager if enabled
         if settings.partitioning.enabled and worker_id:
             self._partition_manager = PartitionManager(settings.partitioning, worker_id)
@@ -62,7 +62,7 @@ class MessageProcessor:
         """Close HTTP session and cleanup resources."""
         if self._session and not self._session.closed:
             await self._session.close()
-        
+
         # Cleanup expired sessions if partitioning is enabled
         if self._partition_manager:
             self._partition_manager.cleanup_expired_sessions()
@@ -201,7 +201,7 @@ class MessageProcessor:
             ProcessingError: If the request fails
         """
         metadata = metadata or {}
-        
+
         # Check partitioning - skip if not assigned to this worker
         if self._partition_manager and full_message:
             should_process = self._partition_manager.should_process_message(full_message)
@@ -209,11 +209,11 @@ class MessageProcessor:
                 logger.debug("Message skipped - not assigned to this partition")
                 # Return empty response to acknowledge message without processing
                 return {"skipped": True, "reason": "partition_not_assigned"}, 200, {}
-        
+
         # Apply routing if enabled
         endpoint_name = metadata.get("endpoint")
         method = metadata.get("method")
-        
+
         if self._routing_engine and full_message:
             routing_result = self._routing_engine.route_message(full_message)
             if routing_result:
@@ -221,13 +221,13 @@ class MessageProcessor:
                 payload = routing_result.transformed_payload
                 endpoint_name = routing_result.endpoint
                 method = routing_result.method or method
-                
+
                 # Merge mapped headers
                 if routing_result.headers and headers:
                     headers = {**headers, **routing_result.headers}
                 elif routing_result.headers:
                     headers = routing_result.headers
-                
+
                 logger.info(
                     "Message routed",
                     route_name=routing_result.route_name,

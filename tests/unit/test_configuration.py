@@ -1,18 +1,19 @@
 """Configuration validation and settings tests."""
 
+import os
+from unittest.mock import patch
+
 import pytest
 from pydantic import ValidationError
-from unittest.mock import patch
-import os
 
 from openhqm.config.settings import (
-    Settings,
-    ServerSettings,
-    QueueSettings,
-    ProxySettings,
-    RoutingSettings,
-    PartitionConfig,
     EndpointConfig,
+    PartitionConfig,
+    ProxySettings,
+    QueueSettings,
+    RoutingSettings,
+    ServerSettings,
+    Settings,
 )
 
 
@@ -366,7 +367,7 @@ class TestEnvironmentOverrides:
             ("no", False),
         ]
 
-        for env_val, expected in test_cases:
+        for env_val, _expected in test_cases:
             # Pydantic handles these conversions
             with patch.dict(os.environ, {"OPENHQM_PROXY__ENABLED": env_val}):
                 # Would need actual Settings reload to test
@@ -383,13 +384,13 @@ class TestConfigurationSecurity:
         )
 
         # Should not include token in string representation
-        str_repr = str(config)
+        str(config)
         # Depending on implementation, might be masked
         # This is a reminder to implement secret masking
 
     def test_password_not_in_repr(self):
         """Test that passwords are not in string representation."""
-        config = EndpointConfig(
+        EndpointConfig(
             url="http://api.example.com",
             auth_type="basic",
             auth_username="user",

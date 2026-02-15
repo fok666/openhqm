@@ -314,7 +314,7 @@ async def run_worker(worker_id: str, worker_index: int = 0, worker_count: int = 
 
     # Create processor with worker_id for partitioning
     processor = MessageProcessor(worker_id=worker_id)
-    
+
     # Set partition assignments if partitioning is enabled
     if settings.partitioning.enabled:
         processor.set_partition_assignments(worker_count, worker_index)
@@ -340,7 +340,7 @@ async def main():
     worker_id = sys.argv[1] if len(sys.argv) > 1 else "worker-1"
     worker_index = int(sys.argv[2]) if len(sys.argv) > 2 else 0
     worker_count = int(sys.argv[3]) if len(sys.argv) > 3 else settings.worker.count
-    
+
     await run_worker(worker_id, worker_index, worker_count)
 
 

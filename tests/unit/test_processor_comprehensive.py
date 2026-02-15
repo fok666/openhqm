@@ -1,11 +1,12 @@
 """Comprehensive tests for MessageProcessor including routing and partitioning."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
-from openhqm.worker.processor import MessageProcessor
-from openhqm.exceptions import ConfigurationError, ProcessingError
+import pytest
+
 from openhqm.config.settings import EndpointConfig
+from openhqm.exceptions import ConfigurationError
+from openhqm.worker.processor import MessageProcessor
 
 
 @pytest.fixture

@@ -1,9 +1,9 @@
 """Comprehensive API integration tests."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, patch, MagicMock
-from datetime import datetime
 
 from openhqm.api.app import create_app
 

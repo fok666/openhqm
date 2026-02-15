@@ -1,7 +1,5 @@
 """Tests for partition manager."""
 
-import pytest
-
 from openhqm.partitioning.manager import PartitionManager
 from openhqm.partitioning.models import PartitionConfig, PartitionStrategy
 

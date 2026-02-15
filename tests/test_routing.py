@@ -1,7 +1,5 @@
 """Tests for routing engine."""
 
-import pytest
-
 from openhqm.routing.engine import RoutingEngine
 from openhqm.routing.models import Route, RouteConfig, TransformType
 
