@@ -67,9 +67,11 @@ class MessageProcessor:
         if self._partition_manager:
             self._partition_manager.cleanup_expired_sessions()
 
-    def _example_process(self, payload: dict[str, Any]) -> tuple[dict[str, Any], int, dict[str, str]]:
+    def _example_process(
+        self, payload: dict[str, Any]
+    ) -> tuple[dict[str, Any], int, dict[str, str]]:
         """Example processing logic for testing when proxy mode is disabled.
-        
+
         Returns:
             Tuple of (response_body, status_code, response_headers)
         """

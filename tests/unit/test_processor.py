@@ -34,7 +34,9 @@ async def test_processor_uppercase(disable_proxy_mode):
     """Test uppercase operation."""
     processor = MessageProcessor()
 
-    result, status, headers = await processor.process({"operation": "uppercase", "data": "hello world"})
+    result, status, headers = await processor.process(
+        {"operation": "uppercase", "data": "hello world"}
+    )
 
     assert result["output"] == "HELLO WORLD"
     assert status == 200

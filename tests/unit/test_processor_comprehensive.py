@@ -410,7 +410,9 @@ async def test_example_process_uppercase():
     """Test example uppercase operation."""
     processor = MessageProcessor()
 
-    result, status, headers = processor._example_process({"operation": "uppercase", "data": "hello"})
+    result, status, headers = processor._example_process(
+        {"operation": "uppercase", "data": "hello"}
+    )
 
     assert result["output"] == "HELLO"
     assert status == 200
