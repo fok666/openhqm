@@ -84,9 +84,10 @@ class TestEdgeCases:
         with patch("openhqm.worker.processor.settings") as mock_settings:
             mock_settings.proxy.enabled = False
 
-            result = processor._example_process({})
+            result, status, headers = processor._example_process({})
 
             assert "output" in result
+            assert status == 200
 
     @pytest.mark.asyncio
     async def test_extremely_large_payload(self):
@@ -96,9 +97,10 @@ class TestEdgeCases:
         # 1MB payload
         large_payload = {"data": "x" * (1024 * 1024), "operation": "echo"}
 
-        result = processor._example_process(large_payload)
+        result, status, headers = processor._example_process(large_payload)
 
         assert len(result["output"]) == 1024 * 1024
+        assert status == 200
 
     @pytest.mark.asyncio
     async def test_zero_partition_count(self):
@@ -393,10 +395,11 @@ class TestInputValidation:
 
         payload = {"operation": "echo", "data": "'; DROP TABLE users; --"}
 
-        result = processor._example_process(payload)
+        result, status, headers = processor._example_process(payload)
 
         # Should handle safely (no DB in this system, but test anyway)
         assert "DROP TABLE" in result["output"]
+        assert status == 200
 
     @pytest.mark.asyncio
     async def test_xss_in_payload(self):
@@ -405,10 +408,11 @@ class TestInputValidation:
 
         payload = {"operation": "echo", "data": "<script>alert('XSS')</script>"}
 
-        result = processor._example_process(payload)
+        result, status, headers = processor._example_process(payload)
 
         # Should not execute, just return as-is
         assert "<script>" in result["output"]
+        assert status == 200
 
     @pytest.mark.asyncio
     async def test_path_traversal_in_endpoint(self):
@@ -430,7 +434,8 @@ class TestInputValidation:
 
         payload = {"operation": "echo", "data": "test\x00hidden"}
 
-        result = processor._example_process(payload)
+        result, status, headers = processor._example_process(payload)
 
         # Should handle gracefully
         assert "test" in result["output"]
+        assert status == 200

@@ -398,10 +398,11 @@ async def test_example_process_echo():
     """Test example echo operation."""
     processor = MessageProcessor()
 
-    result = processor._example_process({"operation": "echo", "data": "hello"})
+    result, status, headers = processor._example_process({"operation": "echo", "data": "hello"})
 
     assert result["output"] == "hello"
     assert "processed_at" in result
+    assert status == 200
 
 
 @pytest.mark.asyncio
@@ -409,9 +410,10 @@ async def test_example_process_uppercase():
     """Test example uppercase operation."""
     processor = MessageProcessor()
 
-    result = processor._example_process({"operation": "uppercase", "data": "hello"})
+    result, status, headers = processor._example_process({"operation": "uppercase", "data": "hello"})
 
     assert result["output"] == "HELLO"
+    assert status == 200
 
 
 @pytest.mark.asyncio
@@ -419,9 +421,10 @@ async def test_example_process_reverse():
     """Test example reverse operation."""
     processor = MessageProcessor()
 
-    result = processor._example_process({"operation": "reverse", "data": "hello"})
+    result, status, headers = processor._example_process({"operation": "reverse", "data": "hello"})
 
     assert result["output"] == "olleh"
+    assert status == 200
 
 
 @pytest.mark.asyncio
@@ -438,9 +441,10 @@ async def test_example_process_unknown():
     """Test example unknown operation."""
     processor = MessageProcessor()
 
-    result = processor._example_process({"operation": "unknown", "data": "test"})
+    result, status, headers = processor._example_process({"operation": "unknown", "data": "test"})
 
     assert "Unknown operation" in result["output"]
+    assert status == 200
 
 
 @pytest.mark.asyncio

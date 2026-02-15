@@ -203,9 +203,10 @@ async def test_processor_proxy_disabled():
         mock_proxy.enabled = False
 
         # Should fall back to example processing instead of raising error
-        result = await processor.process(payload={"operation": "echo", "data": "test"})
+        result, status, headers = await processor.process(payload={"operation": "echo", "data": "test"})
         assert result["output"] == "test"
         assert "processed_at" in result
+        assert status == 200
 
 
 @pytest.mark.asyncio
