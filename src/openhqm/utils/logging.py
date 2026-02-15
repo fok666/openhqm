@@ -5,11 +5,12 @@ import sys
 
 import structlog
 
-from openhqm.config import settings
-
 
 def setup_logging() -> None:
     """Configure structured logging for the application."""
+    # Import here to avoid circular dependency
+    from openhqm.config.settings import settings
+
     log_level = getattr(logging, settings.monitoring.log_level.upper(), logging.INFO)
 
     # Configure standard library logging

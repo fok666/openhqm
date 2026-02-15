@@ -51,7 +51,7 @@ class RedisQueue(MessageQueueInterface):
         """Close connection to Redis."""
         self._running = False
         if self.redis:
-            await self.redis.close()
+            await self.redis.aclose()
             logger.info("Disconnected from Redis")
 
     async def publish(

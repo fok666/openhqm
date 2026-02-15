@@ -105,8 +105,9 @@ class Worker:
             # Process message
             result, status_code, response_headers = await self.processor.process(
                 message["payload"],
-                metadata=message.get("metadata"),
-                headers=message.get("headers"),
+                metadata=message.get("metadata") or {},
+                headers=message.get("headers") or {},
+                full_message=message,
             )
 
             processing_time = (time.time() - start_time) * 1000  # ms
@@ -287,25 +288,41 @@ class Worker:
         logger.info("Worker shutdown complete", worker_id=self.worker_id)
 
 
-async def run_worker(worker_id: str):
+async def run_worker(worker_id: str, worker_index: int = 0, worker_count: int = 1):
     """
     Run a worker instance.
 
     Args:
         worker_id: Unique worker identifier
+        worker_index: Worker index for partition assignment (0-based)
+        worker_count: Total number of workers
     """
     from openhqm.utils.logging import setup_logging
 
     setup_logging()
 
-    logger.info("Initializing worker", worker_id=worker_id)
+    logger.info(
+        "Initializing worker",
+        worker_id=worker_id,
+        worker_index=worker_index,
+        worker_count=worker_count,
+    )
 
     # Create queue and cache
     queue = await create_queue()
     cache = await create_cache()
 
-    # Create processor
-    processor = MessageProcessor()
+    # Create processor with worker_id for partitioning
+    processor = MessageProcessor(worker_id=worker_id)
+
+    # Set partition assignments if partitioning is enabled
+    if settings.partitioning.enabled:
+        processor.set_partition_assignments(worker_count, worker_index)
+        logger.info(
+            "Partition assignments configured",
+            worker_id=worker_id,
+            stats=processor.get_partition_stats(),
+        )
 
     try:
         # Create and start worker
@@ -321,7 +338,10 @@ async def main():
     import sys
 
     worker_id = sys.argv[1] if len(sys.argv) > 1 else "worker-1"
-    await run_worker(worker_id)
+    worker_index = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+    worker_count = int(sys.argv[3]) if len(sys.argv) > 3 else settings.worker.count
+
+    await run_worker(worker_id, worker_index, worker_count)
 
 
 if __name__ == "__main__":

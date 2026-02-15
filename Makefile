@@ -1,4 +1,13 @@
 .PHONY: help install install-dev clean test lint format docker-build docker-up docker-down run-api run-worker
+.PHONY: ci-checks ci-checks-fix lint-fix pre-commit-install pre-commit-run
+
+# Environment setup
+PYTHON := python3
+PIP := $(PYTHON) -m pip
+PYTEST := pytest
+RUFF := ruff
+MYPY := mypy
+export PYTHONPATH := $(shell pwd)/src
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -31,18 +40,55 @@ test-integration: ## Run integration tests only
 	pytest tests/integration/ -v -m integration
 
 lint: ## Run linters
-	ruff check src/ tests/
-	mypy src/
+	$(RUFF) check src/ tests/
+	$(MYPY) src/
+
+lint-fix: ## Run linters with auto-fix
+	$(RUFF) check src/ tests/ --fix
+	$(RUFF) format src/ tests/
 
 format: ## Format code
-	ruff format src/ tests/
+	$(RUFF) format src/ tests/
 
 format-check: ## Check code formatting
-	ruff format --check src/ tests/
+	$(RUFF) format --check src/ tests/
 
 security: ## Run security checks
-	bandit -r src/
-	safety check
+	bandit -r src/ -q
+	@echo "Security scan complete"
+
+# CI/CD targets
+ci-checks: ## Run all CI checks locally (mimics GitHub Actions)
+	@echo "==> Running CI checks..."
+	@chmod +x scripts/run-ci-checks.sh
+	@./scripts/run-ci-checks.sh
+
+ci-checks-fast: ## Run CI checks without integration tests (no external dependencies)
+	@echo "==> Running fast CI checks (unit tests only)..."
+	@chmod +x scripts/run-ci-checks.sh
+	@./scripts/run-ci-checks.sh --fast
+
+ci-checks-fix: ## Run CI checks with auto-fix
+	@echo "==> Running CI checks with auto-fix..."
+	@chmod +x scripts/run-ci-checks.sh
+	@./scripts/run-ci-checks.sh --fix
+
+ci-checks-fast: ## Run fast CI checks (skip integration tests and mypy)
+	@echo "==> Running fast CI checks..."
+	@chmod +x scripts/run-ci-checks.sh
+	@./scripts/run-ci-checks.sh --fast
+
+# Pre-commit hooks
+pre-commit-install: ## Install pre-commit hooks
+	$(PIP) install pre-commit
+	pre-commit install
+	@echo "Pre-commit hooks installed successfully"
+
+pre-commit-run: ## Run pre-commit hooks on all files
+	pre-commit run --all-files
+
+pre-commit-update: ## Update pre-commit hooks to latest versions
+	pre-commit autoupdate
 
 docker-build: ## Build Docker image
 	docker build -t openhqm:latest .

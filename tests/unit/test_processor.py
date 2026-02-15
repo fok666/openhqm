@@ -21,11 +21,12 @@ async def test_processor_echo(disable_proxy_mode):
     """Test echo operation."""
     processor = MessageProcessor()
 
-    result = await processor.process({"operation": "echo", "data": "Hello World"})
+    result, status, headers = await processor.process({"operation": "echo", "data": "Hello World"})
 
     assert "output" in result
     assert result["output"] == "Hello World"
     assert "processed_at" in result
+    assert status == 200
 
 
 @pytest.mark.asyncio
@@ -33,9 +34,12 @@ async def test_processor_uppercase(disable_proxy_mode):
     """Test uppercase operation."""
     processor = MessageProcessor()
 
-    result = await processor.process({"operation": "uppercase", "data": "hello world"})
+    result, status, headers = await processor.process(
+        {"operation": "uppercase", "data": "hello world"}
+    )
 
     assert result["output"] == "HELLO WORLD"
+    assert status == 200
 
 
 @pytest.mark.asyncio
@@ -43,9 +47,10 @@ async def test_processor_reverse(disable_proxy_mode):
     """Test reverse operation."""
     processor = MessageProcessor()
 
-    result = await processor.process({"operation": "reverse", "data": "hello"})
+    result, status, headers = await processor.process({"operation": "reverse", "data": "hello"})
 
     assert result["output"] == "olleh"
+    assert status == 200
 
 
 @pytest.mark.asyncio
@@ -53,9 +58,10 @@ async def test_processor_unknown_operation(disable_proxy_mode):
     """Test unknown operation."""
     processor = MessageProcessor()
 
-    result = await processor.process({"operation": "unknown", "data": "test"})
+    result, status, headers = await processor.process({"operation": "unknown", "data": "test"})
 
     assert "Unknown operation" in result["output"]
+    assert status == 200
 
 
 @pytest.mark.asyncio
