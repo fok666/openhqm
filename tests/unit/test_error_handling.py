@@ -27,6 +27,8 @@ class TestExceptionHandling:
     async def test_processing_error_with_network_timeout(self):
         """Test processing error for network timeout."""
         with patch("openhqm.worker.processor.settings") as mock_settings:
+            mock_settings.routing.enabled = False
+            mock_settings.partitioning.enabled = False
             mock_settings.proxy.enabled = True
             mock_settings.proxy.default_endpoint = "http://slow.example.com"
             mock_settings.worker.timeout_seconds = 1
@@ -45,6 +47,8 @@ class TestExceptionHandling:
         import aiohttp
 
         with patch("openhqm.worker.processor.settings") as mock_settings:
+            mock_settings.routing.enabled = False
+            mock_settings.partitioning.enabled = False
             mock_settings.proxy.enabled = True
             mock_settings.proxy.default_endpoint = "http://unreachable.example.com"
 
@@ -79,10 +83,12 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_empty_payload_processing(self):
         """Test processing with empty payload."""
-        processor = MessageProcessor()
-
         with patch("openhqm.worker.processor.settings") as mock_settings:
+            mock_settings.routing.enabled = False
+            mock_settings.partitioning.enabled = False
             mock_settings.proxy.enabled = False
+
+            processor = MessageProcessor()
 
             result, status, headers = processor._example_process({})
 
@@ -92,7 +98,12 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_extremely_large_payload(self):
         """Test handling of very large payload."""
-        processor = MessageProcessor()
+        with patch("openhqm.worker.processor.settings") as mock_settings:
+            mock_settings.routing.enabled = False
+            mock_settings.partitioning.enabled = False
+            mock_settings.proxy.enabled = False
+
+            processor = MessageProcessor()
 
         # 1MB payload
         large_payload = {"data": "x" * (1024 * 1024), "operation": "echo"}
@@ -192,11 +203,14 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_unicode_in_headers(self):
         """Test handling of unicode characters in headers."""
-        processor = MessageProcessor()
-
         with patch("openhqm.worker.processor.settings") as mock_settings:
+            mock_settings.routing.enabled = False
+            mock_settings.partitioning.enabled = False
+            mock_settings.proxy.enabled = False
             mock_settings.proxy.forward_headers = ["*"]
             mock_settings.proxy.strip_headers = []
+
+            processor = MessageProcessor()
 
             from openhqm.config.settings import EndpointConfig
 
@@ -209,8 +223,11 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_circular_reference_in_payload(self):
         """Test handling of circular references."""
-        # JSON can't handle circular references, but test serialization
-        MessageProcessor()
+        with patch("openhqm.worker.processor.settings") as mock_settings:
+            mock_settings.routing.enabled = False
+            mock_settings.partitioning.enabled = False
+
+            MessageProcessor()
 
         payload = {"a": {"b": {"c": {}}}}
         payload["a"]["b"]["c"]["circular"] = payload["a"]  # Create cycle
@@ -225,11 +242,14 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_max_header_size(self):
         """Test handling of extremely large headers."""
-        processor = MessageProcessor()
-
         with patch("openhqm.worker.processor.settings") as mock_settings:
+            mock_settings.routing.enabled = False
+            mock_settings.partitioning.enabled = False
+            mock_settings.proxy.enabled = False
             mock_settings.proxy.forward_headers = ["*"]
             mock_settings.proxy.strip_headers = []
+
+            processor = MessageProcessor()
 
             from openhqm.config.settings import EndpointConfig
 
@@ -244,11 +264,14 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_special_header_names(self):
         """Test handling of special header names."""
-        processor = MessageProcessor()
-
         with patch("openhqm.worker.processor.settings") as mock_settings:
+            mock_settings.routing.enabled = False
+            mock_settings.partitioning.enabled = False
+            mock_settings.proxy.enabled = False
             mock_settings.proxy.forward_headers = ["*"]
             mock_settings.proxy.strip_headers = []
+
+            processor = MessageProcessor()
 
             from openhqm.config.settings import EndpointConfig
 
@@ -301,10 +324,12 @@ class TestConcurrency:
     @pytest.mark.asyncio
     async def test_session_reuse_under_load(self):
         """Test that session is reused properly under concurrent load."""
-        processor = MessageProcessor()
-
         with patch("openhqm.worker.processor.settings") as mock_settings:
+            mock_settings.routing.enabled = False
+            mock_settings.partitioning.enabled = False
             mock_settings.worker.timeout_seconds = 300
+
+            processor = MessageProcessor()
 
             # Get session multiple times concurrently
             sessions = await asyncio.gather(*[processor._get_session() for _ in range(100)])
@@ -338,7 +363,11 @@ class TestResourceCleanup:
     @pytest.mark.asyncio
     async def test_processor_close_idempotent(self):
         """Test that close() can be called multiple times safely."""
-        processor = MessageProcessor()
+        with patch("openhqm.worker.processor.settings") as mock_settings:
+            mock_settings.routing.enabled = False
+            mock_settings.partitioning.enabled = False
+
+            processor = MessageProcessor()
 
         await processor._get_session()
 
@@ -371,7 +400,11 @@ class TestResourceCleanup:
     @pytest.mark.asyncio
     async def test_session_recreation_after_error(self):
         """Test session is recreated after error."""
-        processor = MessageProcessor()
+        with patch("openhqm.worker.processor.settings") as mock_settings:
+            mock_settings.routing.enabled = False
+            mock_settings.partitioning.enabled = False
+
+            processor = MessageProcessor()
 
         session1 = await processor._get_session()
 
@@ -391,7 +424,11 @@ class TestInputValidation:
     @pytest.mark.asyncio
     async def test_sql_injection_in_payload(self):
         """Test handling of SQL injection attempts in payload."""
-        processor = MessageProcessor()
+        with patch("openhqm.worker.processor.settings") as mock_settings:
+            mock_settings.routing.enabled = False
+            mock_settings.partitioning.enabled = False
+
+            processor = MessageProcessor()
 
         payload = {"operation": "echo", "data": "'; DROP TABLE users; --"}
 
@@ -404,7 +441,11 @@ class TestInputValidation:
     @pytest.mark.asyncio
     async def test_xss_in_payload(self):
         """Test handling of XSS attempts in payload."""
-        processor = MessageProcessor()
+        with patch("openhqm.worker.processor.settings") as mock_settings:
+            mock_settings.routing.enabled = False
+            mock_settings.partitioning.enabled = False
+
+            processor = MessageProcessor()
 
         payload = {"operation": "echo", "data": "<script>alert('XSS')</script>"}
 

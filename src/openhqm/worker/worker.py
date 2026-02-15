@@ -105,8 +105,8 @@ class Worker:
             # Process message
             result, status_code, response_headers = await self.processor.process(
                 message["payload"],
-                metadata=message.get("metadata"),
-                headers=message.get("headers"),
+                metadata=message.get("metadata") or {},
+                headers=message.get("headers") or {},
                 full_message=message,
             )
 

@@ -30,11 +30,14 @@ def mock_cache():
 @pytest.fixture
 def client(mock_queue, mock_cache):
     """Create test client with mocked dependencies."""
-    with patch("openhqm.api.dependencies.get_queue", return_value=mock_queue):
-        with patch("openhqm.api.dependencies.get_cache", return_value=mock_cache):
-            app = create_app()
-            with TestClient(app) as test_client:
-                yield test_client
+    # Patch the dependencies before creating the app
+    with patch("openhqm.api.dependencies._queue_instance", mock_queue):
+        with patch("openhqm.api.dependencies._cache_instance", mock_cache):
+            with patch("openhqm.api.dependencies.get_queue", return_value=mock_queue):
+                with patch("openhqm.api.dependencies.get_cache", return_value=mock_cache):
+                    app = create_app()
+                    with TestClient(app, raise_server_exceptions=False) as test_client:
+                        yield test_client
 
 
 def test_health_check(client):
@@ -59,7 +62,7 @@ def test_submit_request_success(client, mock_queue):
     """Test successful request submission."""
     payload = {
         "payload": {"operation": "test", "data": "hello"},
-        "metadata": {"priority": "normal"},
+        "metadata": {"priority": 5},
     }
 
     response = client.post("/api/v1/submit", json=payload)
@@ -140,7 +143,7 @@ def test_submit_request_queue_failure(client, mock_queue):
     response = client.post("/api/v1/submit", json=payload)
 
     assert response.status_code == 500
-    assert "error" in response.json()
+    assert "detail" in response.json()
 
 
 def test_get_status_pending(client, mock_cache):

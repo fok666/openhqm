@@ -123,7 +123,7 @@ class RoutingEngine:
             ProcessingError: If transform fails
         """
         try:
-            from jsonpath_ng import parse  # type: ignore[import-not-found]
+            from jsonpath_ng import parse  # type: ignore[import-untyped, import-not-found]
 
             jsonpath_expr = parse(expression)
             matches = [match.value for match in jsonpath_expr.find(data)]

@@ -45,6 +45,7 @@ async def test_processor_initialization_with_routing():
     """Test processor initialization with routing enabled."""
     with patch("openhqm.worker.processor.settings") as mock_settings:
         mock_settings.routing.enabled = True
+        mock_settings.routing.config_path = None  # Explicitly set to None
         mock_settings.routing.config_dict = {
             "version": "1.0",
             "routes": [
@@ -99,7 +100,11 @@ async def test_processor_close_cleanup():
 @pytest.mark.asyncio
 async def test_prepare_auth_headers_bearer():
     """Test bearer token authentication."""
-    processor = MessageProcessor()
+    with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
+
+        processor = MessageProcessor()
 
     endpoint = EndpointConfig(
         url="http://test.com", auth_type="bearer", auth_token="test-token-123"
@@ -113,7 +118,11 @@ async def test_prepare_auth_headers_bearer():
 @pytest.mark.asyncio
 async def test_prepare_auth_headers_api_key():
     """Test API key authentication."""
-    processor = MessageProcessor()
+    with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
+
+        processor = MessageProcessor()
 
     endpoint = EndpointConfig(
         url="http://test.com",
@@ -130,7 +139,11 @@ async def test_prepare_auth_headers_api_key():
 @pytest.mark.asyncio
 async def test_prepare_auth_headers_api_key_default_header():
     """Test API key with default header name."""
-    processor = MessageProcessor()
+    with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
+
+        processor = MessageProcessor()
 
     endpoint = EndpointConfig(url="http://test.com", auth_type="api_key", auth_token="api-key-789")
 
@@ -142,7 +155,11 @@ async def test_prepare_auth_headers_api_key_default_header():
 @pytest.mark.asyncio
 async def test_prepare_auth_headers_basic():
     """Test basic authentication."""
-    processor = MessageProcessor()
+    with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
+
+        processor = MessageProcessor()
 
     endpoint = EndpointConfig(
         url="http://test.com", auth_type="basic", auth_username="user", auth_password="pass"
@@ -157,7 +174,11 @@ async def test_prepare_auth_headers_basic():
 @pytest.mark.asyncio
 async def test_prepare_auth_headers_custom():
     """Test custom authentication."""
-    processor = MessageProcessor()
+    with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
+
+        processor = MessageProcessor()
 
     endpoint = EndpointConfig(
         url="http://test.com",
@@ -174,7 +195,11 @@ async def test_prepare_auth_headers_custom():
 @pytest.mark.asyncio
 async def test_prepare_auth_headers_none():
     """Test no authentication."""
-    processor = MessageProcessor()
+    with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
+
+        processor = MessageProcessor()
 
     endpoint = EndpointConfig(url="http://test.com")
 
@@ -187,6 +212,8 @@ async def test_prepare_auth_headers_none():
 async def test_merge_headers_with_config_headers():
     """Test merging static config headers."""
     with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
         mock_settings.proxy.forward_headers = ["*"]
         mock_settings.proxy.strip_headers = []
 
@@ -203,6 +230,8 @@ async def test_merge_headers_with_config_headers():
 async def test_merge_headers_with_forwarded_headers():
     """Test forwarding request headers."""
     with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
         mock_settings.proxy.forward_headers = ["*"]
         mock_settings.proxy.strip_headers = []
 
@@ -221,6 +250,8 @@ async def test_merge_headers_with_forwarded_headers():
 async def test_merge_headers_strips_blacklisted():
     """Test stripping blacklisted headers."""
     with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
         mock_settings.proxy.forward_headers = ["*"]
         mock_settings.proxy.strip_headers = ["Host", "Connection"]
 
@@ -240,6 +271,8 @@ async def test_merge_headers_strips_blacklisted():
 async def test_merge_headers_auth_override_precedence():
     """Test that auth headers override forwarded headers."""
     with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
         mock_settings.proxy.forward_headers = ["*"]
         mock_settings.proxy.strip_headers = []
 
@@ -260,6 +293,8 @@ async def test_merge_headers_auth_override_precedence():
 async def test_get_endpoint_config_named_endpoint():
     """Test getting named endpoint configuration."""
     with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
         mock_settings.proxy.enabled = True
         mock_settings.proxy.endpoints = {
             "api1": EndpointConfig(url="http://api1.com"),
@@ -277,6 +312,8 @@ async def test_get_endpoint_config_named_endpoint():
 async def test_get_endpoint_config_unknown_endpoint():
     """Test error for unknown endpoint."""
     with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
         mock_settings.proxy.enabled = True
         mock_settings.proxy.endpoints = {}
 
@@ -290,6 +327,8 @@ async def test_get_endpoint_config_unknown_endpoint():
 async def test_get_endpoint_config_default_endpoint_named():
     """Test using default endpoint from named endpoints."""
     with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
         mock_settings.proxy.enabled = True
         mock_settings.proxy.default_endpoint = "api1"
         mock_settings.proxy.endpoints = {
@@ -307,6 +346,8 @@ async def test_get_endpoint_config_default_endpoint_named():
 async def test_get_endpoint_config_default_endpoint_url():
     """Test using default endpoint as direct URL."""
     with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
         mock_settings.proxy.enabled = True
         mock_settings.proxy.default_endpoint = "http://default.com"
         mock_settings.proxy.endpoints = {}
@@ -322,6 +363,8 @@ async def test_get_endpoint_config_default_endpoint_url():
 async def test_get_endpoint_config_proxy_disabled():
     """Test that proxy disabled returns None."""
     with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
         mock_settings.proxy.enabled = False
 
         processor = MessageProcessor()
@@ -396,7 +439,11 @@ async def test_process_with_partition_filtering():
 @pytest.mark.asyncio
 async def test_example_process_echo():
     """Test example echo operation."""
-    processor = MessageProcessor()
+    with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
+
+        processor = MessageProcessor()
 
     result, status, headers = processor._example_process({"operation": "echo", "data": "hello"})
 
@@ -408,7 +455,11 @@ async def test_example_process_echo():
 @pytest.mark.asyncio
 async def test_example_process_uppercase():
     """Test example uppercase operation."""
-    processor = MessageProcessor()
+    with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
+
+        processor = MessageProcessor()
 
     result, status, headers = processor._example_process(
         {"operation": "uppercase", "data": "hello"}
@@ -421,7 +472,11 @@ async def test_example_process_uppercase():
 @pytest.mark.asyncio
 async def test_example_process_reverse():
     """Test example reverse operation."""
-    processor = MessageProcessor()
+    with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
+
+        processor = MessageProcessor()
 
     result, status, headers = processor._example_process({"operation": "reverse", "data": "hello"})
 
@@ -432,7 +487,11 @@ async def test_example_process_reverse():
 @pytest.mark.asyncio
 async def test_example_process_error():
     """Test example error operation."""
-    processor = MessageProcessor()
+    with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
+
+        processor = MessageProcessor()
 
     with pytest.raises(ValueError, match="Test error"):
         processor._example_process({"operation": "error"})
@@ -441,7 +500,11 @@ async def test_example_process_error():
 @pytest.mark.asyncio
 async def test_example_process_unknown():
     """Test example unknown operation."""
-    processor = MessageProcessor()
+    with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
+
+        processor = MessageProcessor()
 
     result, status, headers = processor._example_process({"operation": "unknown", "data": "test"})
 
@@ -453,6 +516,8 @@ async def test_example_process_unknown():
 async def test_session_management():
     """Test that session is created and reused."""
     with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
         mock_settings.worker.timeout_seconds = 300
 
         processor = MessageProcessor()
@@ -468,6 +533,8 @@ async def test_session_management():
 async def test_session_recreation_after_close():
     """Test that session is recreated after close."""
     with patch("openhqm.worker.processor.settings") as mock_settings:
+        mock_settings.routing.enabled = False
+        mock_settings.partitioning.enabled = False
         mock_settings.worker.timeout_seconds = 300
 
         processor = MessageProcessor()
