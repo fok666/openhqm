@@ -21,7 +21,7 @@ python-semantic-release==9.14.0
 
 # Documentation
 mkdocs==1.5.3
-mkdocs-material==9.5.3
+mkdocs-material==9.7.2
 
 # Load testing
 locust==2.43.2
