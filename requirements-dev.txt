@@ -20,7 +20,7 @@ safety==3.2.11
 python-semantic-release==10.5.3
 
 # Documentation
-mkdocs==1.5.3
+mkdocs==1.6.1
 mkdocs-material==9.7.2
 
 # Load testing
