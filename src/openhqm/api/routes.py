@@ -4,8 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from openhqm.api.dependencies import get_cache, get_queue
 from openhqm.api.models import (
@@ -172,6 +171,7 @@ async def get_status(
 async def get_response(
     correlation_id: str,
     cache: CacheInterface = Depends(get_cache),
+    response: Response = None,  # type: ignore[assignment]
 ) -> ResultResponse:
     """
     Get the result of a processed request.
@@ -223,14 +223,14 @@ async def get_response(
                 ),
             )
         else:
-            # Still processing - return HTTP 202 Accepted
-            return JSONResponse(
-                status_code=status.HTTP_202_ACCEPTED,
-                content={
-                    "correlation_id": correlation_id,
-                    "status": req_status.value,
-                    "result": None,
-                },
+            # Still processing — set 202 Accepted on the response object so
+            # FastAPI serialises through ResultResponse (keeps the type correct)
+            if response is not None:
+                response.status_code = status.HTTP_202_ACCEPTED
+            return ResultResponse(
+                correlation_id=correlation_id,
+                status=req_status,
+                result=None,
             )
 
     except HTTPException:
