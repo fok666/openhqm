@@ -111,7 +111,8 @@ class EndpointConfig(BaseModel):
     auth_username: str | None = Field(default=None, description="Username for basic auth")
     auth_password: str | None = Field(default=None, description="Password for basic auth")
     auth_header_name: str | None = Field(
-        default=None, description="Header name for api_key/custom auth (defaults to X-API-Key for api_key type)"
+        default=None,
+        description="Header name for api_key/custom auth (defaults to X-API-Key for api_key type)",
     )
 
 

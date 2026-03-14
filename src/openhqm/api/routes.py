@@ -150,9 +150,7 @@ async def get_status(
             correlation_id=correlation_id,
             status=RequestStatus(metadata["status"]),
             submitted_at=datetime.fromisoformat(metadata["submitted_at"]),
-            updated_at=datetime.fromisoformat(
-                metadata.get("updated_at", metadata["submitted_at"])
-            ),
+            updated_at=datetime.fromisoformat(metadata.get("updated_at", metadata["submitted_at"])),
         )
 
     except HTTPException:
