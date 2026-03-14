@@ -76,8 +76,6 @@ class MessageProcessor:
         Returns:
             Tuple of (response_body, status_code, response_headers)
         """
-        from datetime import datetime
-
         operation = payload.get("operation", "unknown")
         data = payload.get("data", "")
 
