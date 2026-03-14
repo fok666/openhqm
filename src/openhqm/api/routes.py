@@ -1,10 +1,10 @@
 """API route handlers."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from openhqm.api.dependencies import get_cache, get_queue
 from openhqm.api.models import (
@@ -56,7 +56,7 @@ async def submit_request(
         HTTPException: If queueing fails
     """
     correlation_id = str(uuid.uuid4())
-    submitted_at = datetime.utcnow()
+    submitted_at = datetime.now(UTC)
 
     log = logger.bind(correlation_id=correlation_id)
     log.info("Submitting request", payload_size=len(str(request.payload)))
@@ -149,7 +149,7 @@ async def get_status(
             correlation_id=correlation_id,
             status=RequestStatus(metadata["status"]),
             submitted_at=datetime.fromisoformat(metadata["submitted_at"]),
-            updated_at=datetime.fromisoformat(metadata["updated_at"]),
+            updated_at=datetime.fromisoformat(metadata.get("updated_at", metadata["submitted_at"])),
         )
 
     except HTTPException:
@@ -171,6 +171,7 @@ async def get_status(
 async def get_response(
     correlation_id: str,
     cache: CacheInterface = Depends(get_cache),
+    response: Response = None,  # type: ignore[assignment]
 ) -> ResultResponse:
     """
     Get the result of a processed request.
@@ -222,10 +223,14 @@ async def get_response(
                 ),
             )
         else:
-            # Still processing
+            # Still processing — set 202 Accepted on the response object so
+            # FastAPI serialises through ResultResponse (keeps the type correct)
+            if response is not None:
+                response.status_code = status.HTTP_202_ACCEPTED
             return ResultResponse(
                 correlation_id=correlation_id,
                 status=req_status,
+                result=None,
             )
 
     except HTTPException:

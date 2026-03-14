@@ -1,5 +1,5 @@
 .PHONY: help install install-dev clean test lint format docker-build docker-up docker-down run-api run-worker
-.PHONY: ci-checks ci-checks-fix lint-fix pre-commit-install pre-commit-run
+.PHONY: ci-checks ci-checks-fix lint-fix pre-commit-install pre-commit-run install-hooks
 
 # Environment setup
 PYTHON := python3
@@ -77,6 +77,11 @@ ci-checks-fast: ## Run fast CI checks (skip integration tests and mypy)
 	@echo "==> Running fast CI checks..."
 	@chmod +x scripts/run-ci-checks.sh
 	@./scripts/run-ci-checks.sh --fast
+
+# Hooks
+install-hooks: ## Install git hooks (pre-push) and pre-commit hooks
+	@chmod +x scripts/install-hooks.sh
+	@./scripts/install-hooks.sh
 
 # Pre-commit hooks
 pre-commit-install: ## Install pre-commit hooks

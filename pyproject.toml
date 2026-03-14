@@ -86,6 +86,7 @@ exclude_lines = [
 line-length = 100
 target-version = "py313"
 src = ["src", "tests"]
+exclude = ["examples"]
 
 [tool.ruff.lint]
 select = [
