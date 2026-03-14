@@ -546,5 +546,5 @@ async def test_session_recreation_after_close():
 
         # Should create new session
         assert session1 is not session2
-        assert not session1.closed
-        assert not session2.closed
+        assert session1.closed  # old session was closed
+        assert not session2.closed  # new session is open

@@ -148,7 +148,11 @@ def test_submit_request_queue_failure(client, mock_queue):
 
 def test_get_status_pending(client, mock_cache):
     """Test getting status for pending request."""
-    mock_cache.get.return_value = {"status": "PENDING", "submitted_at": "2026-02-08T10:00:00Z"}
+    mock_cache.get.return_value = {
+        "status": "PENDING",
+        "submitted_at": "2026-02-08T10:00:00Z",
+        "updated_at": "2026-02-08T10:00:00Z",
+    }
 
     response = client.get("/api/v1/status/test-correlation-123")
 
@@ -222,6 +226,7 @@ def test_get_response_still_processing(client, mock_cache):
         {  # Metadata
             "status": "PROCESSING",
             "submitted_at": "2026-02-08T10:00:00Z",
+            "updated_at": "2026-02-08T10:00:00Z",
         },
         None,  # No response yet
     ]
@@ -232,7 +237,7 @@ def test_get_response_still_processing(client, mock_cache):
     data = response.json()
 
     assert data["status"] == "PROCESSING"
-    assert "result" not in data
+    assert data.get("result") is None
 
 
 def test_get_response_failed(client, mock_cache):
@@ -269,8 +274,14 @@ def test_get_response_not_found(client, mock_cache):
 
 
 def test_cors_headers(client):
-    """Test CORS headers are present."""
-    response = client.options("/api/v1/submit")
+    """Test CORS headers are present in preflight response."""
+    response = client.options(
+        "/api/v1/submit",
+        headers={
+            "Origin": "http://example.com",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
 
     assert "access-control-allow-origin" in response.headers
     assert "access-control-allow-methods" in response.headers

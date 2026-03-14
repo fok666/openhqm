@@ -459,6 +459,8 @@ class TestInputValidation:
     async def test_path_traversal_in_endpoint(self):
         """Test handling of path traversal attempts."""
         with patch("openhqm.worker.processor.settings") as mock_settings:
+            mock_settings.routing.enabled = False
+            mock_settings.partitioning.enabled = False
             mock_settings.proxy.enabled = True
             mock_settings.proxy.endpoints = {}
 

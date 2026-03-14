@@ -1,6 +1,7 @@
 """Message processor for proxying requests to configured endpoints."""
 
 import base64
+from datetime import UTC, datetime
 from typing import Any
 
 import aiohttp
@@ -93,7 +94,7 @@ class MessageProcessor:
 
         result = {
             "output": output,
-            "processed_at": datetime.utcnow().isoformat(),
+            "processed_at": datetime.now(UTC).isoformat(),
         }
         return result, 200, {}
 
@@ -132,10 +133,6 @@ class MessageProcessor:
         if endpoint_config.headers:
             headers.update(endpoint_config.headers)
 
-        # Add authentication headers
-        auth_headers = self._prepare_auth_headers(endpoint_config)
-        headers.update(auth_headers)
-
         # Add forwarded headers from request (if allowed)
         if request_headers:
             forward_list = settings.proxy.forward_headers
@@ -147,6 +144,10 @@ class MessageProcessor:
                     # Check if header should be stripped
                     if key not in strip_list:
                         headers[key] = value
+
+        # Add authentication headers last so they take precedence over forwarded headers
+        auth_headers = self._prepare_auth_headers(endpoint_config)
+        headers.update(auth_headers)
 
         return headers
 

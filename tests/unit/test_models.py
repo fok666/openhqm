@@ -1,6 +1,6 @@
 """Unit tests for API models."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -59,7 +59,7 @@ def test_submit_response():
     response = SubmitResponse(
         correlation_id="test-123",
         status=RequestStatus.PENDING,
-        submitted_at=datetime.utcnow(),
+        submitted_at=datetime.now(UTC),
     )
 
     assert response.correlation_id == "test-123"
@@ -69,7 +69,7 @@ def test_submit_response():
 
 def test_status_response():
     """Test status response model."""
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     response = StatusResponse(
         correlation_id="test-123",
         status=RequestStatus.PROCESSING,
@@ -88,7 +88,7 @@ def test_result_response_completed():
         status=RequestStatus.COMPLETED,
         result={"output": "data"},
         processing_time_ms=1250,
-        completed_at=datetime.utcnow(),
+        completed_at=datetime.now(UTC),
     )
 
     assert response.status == RequestStatus.COMPLETED
@@ -103,7 +103,7 @@ def test_result_response_failed():
         correlation_id="test-123",
         status=RequestStatus.FAILED,
         error="Processing failed",
-        completed_at=datetime.utcnow(),
+        completed_at=datetime.now(UTC),
     )
 
     assert response.status == RequestStatus.FAILED

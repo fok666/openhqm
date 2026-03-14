@@ -1,10 +1,11 @@
 """API route handlers."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 
 from openhqm.api.dependencies import get_cache, get_queue
 from openhqm.api.models import (
@@ -56,7 +57,7 @@ async def submit_request(
         HTTPException: If queueing fails
     """
     correlation_id = str(uuid.uuid4())
-    submitted_at = datetime.utcnow()
+    submitted_at = datetime.now(UTC)
 
     log = logger.bind(correlation_id=correlation_id)
     log.info("Submitting request", payload_size=len(str(request.payload)))
@@ -149,7 +150,9 @@ async def get_status(
             correlation_id=correlation_id,
             status=RequestStatus(metadata["status"]),
             submitted_at=datetime.fromisoformat(metadata["submitted_at"]),
-            updated_at=datetime.fromisoformat(metadata["updated_at"]),
+            updated_at=datetime.fromisoformat(
+                metadata.get("updated_at", metadata["submitted_at"])
+            ),
         )
 
     except HTTPException:
@@ -222,10 +225,14 @@ async def get_response(
                 ),
             )
         else:
-            # Still processing
-            return ResultResponse(
-                correlation_id=correlation_id,
-                status=req_status,
+            # Still processing - return HTTP 202 Accepted
+            return JSONResponse(
+                status_code=status.HTTP_202_ACCEPTED,
+                content={
+                    "correlation_id": correlation_id,
+                    "status": req_status.value,
+                    "result": None,
+                },
             )
 
     except HTTPException:

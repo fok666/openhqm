@@ -1,10 +1,11 @@
 """FastAPI application factory."""
 
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response
@@ -61,6 +62,14 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(router)
 
+    # Add CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     # Health check endpoint
     @app.get("/health", response_model=HealthResponse, tags=["health"])
     async def health_check() -> HealthResponse:
@@ -91,7 +100,7 @@ def create_app() -> FastAPI:
         return HealthResponse(
             status=overall_status,
             version=__version__,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
             components=components,
         )
 

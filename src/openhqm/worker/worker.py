@@ -3,7 +3,7 @@
 import asyncio
 import signal
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -97,7 +97,7 @@ class Worker:
                 {
                     "status": "PROCESSING",
                     "submitted_at": message.get("timestamp"),
-                    "updated_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.now(UTC).isoformat(),
                 },
                 ttl=3600,
             )
@@ -118,7 +118,7 @@ class Worker:
                 {
                     "status": "COMPLETED",
                     "submitted_at": message.get("timestamp"),
-                    "updated_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.now(UTC).isoformat(),
                 },
                 ttl=3600,
             )
@@ -131,7 +131,7 @@ class Worker:
                     "status_code": status_code,
                     "headers": response_headers,
                     "processing_time_ms": int(processing_time),
-                    "completed_at": datetime.utcnow().isoformat(),
+                    "completed_at": datetime.now(UTC).isoformat(),
                 },
                 ttl=3600,
             )
@@ -145,7 +145,7 @@ class Worker:
                     "status_code": status_code,
                     "headers": response_headers,
                     "status": "COMPLETED",
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "processing_time_ms": int(processing_time),
                 },
             )
@@ -206,7 +206,7 @@ class Worker:
                 settings.queue.dlq_name,
                 {
                     **message,
-                    "failed_at": datetime.utcnow().isoformat(),
+                    "failed_at": datetime.now(UTC).isoformat(),
                     "worker_id": self.worker_id,
                     "error": error,
                 },
@@ -235,7 +235,7 @@ class Worker:
                 f"req:{correlation_id}:meta",
                 {
                     "status": "FAILED",
-                    "updated_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.now(UTC).isoformat(),
                 },
                 ttl=3600,
             )
@@ -244,7 +244,7 @@ class Worker:
                 f"resp:{correlation_id}",
                 {
                     "error": error,
-                    "completed_at": datetime.utcnow().isoformat(),
+                    "completed_at": datetime.now(UTC).isoformat(),
                 },
                 ttl=3600,
             )
