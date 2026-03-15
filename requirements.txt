@@ -14,7 +14,7 @@ httpx==0.28.1
 aiohttp==3.13.3
 
 # Redis
-redis[hiredis]==5.0.1
+redis[hiredis]==7.3.0
 
 # Logging
 structlog==25.5.0
