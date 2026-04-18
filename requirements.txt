@@ -21,7 +21,7 @@ structlog==25.5.0
 python-json-logger==4.1.0
 
 # Monitoring
-prometheus-client==0.24.1
+prometheus-client==0.25.0
 
 # Utilities
 python-dotenv==1.2.2
