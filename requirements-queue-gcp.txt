@@ -1,2 +1,2 @@
 # GCP Pub/Sub queue backend
-google-cloud-pubsub>=2.18.0
+google-cloud-pubsub>=2.37.0
