@@ -1,10 +1,10 @@
 """Comprehensive unit tests for Worker class."""
 
 import asyncio
-import signal
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from structlog.testing import capture_logs
 
 from openhqm.cache.interface import CacheInterface
 from openhqm.exceptions import FatalError, RetryableError
@@ -81,10 +81,9 @@ async def test_worker_successful_message_processing(worker, mock_queue, mock_cac
         {"operation": "test"},
         metadata={},
         headers={},
-        full_message=message,
     )
 
-    # Verify cache updates (status + response)
+    # Verify cache updates (PROCESSING + COMPLETED meta, plus stored response)
     assert mock_cache.set.call_count == 3
 
     # Verify status updates
@@ -98,12 +97,8 @@ async def test_worker_successful_message_processing(worker, mock_queue, mock_cac
     assert response_data["result"] == {"result": "success"}
     assert response_data["status_code"] == 200
 
-    # Verify response published to queue
-    mock_queue.publish.assert_called_once()
-    publish_args = mock_queue.publish.call_args[0]
-    assert "responses" in publish_args[0]
-    assert publish_args[1]["correlation_id"] == "test-123"
-    assert publish_args[1]["status"] == "COMPLETED"
+    # Result lives in the cache for polling — nothing is published on success
+    mock_queue.publish.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -214,47 +209,19 @@ async def test_worker_current_message_tracking(worker, mock_processor):
 
 
 @pytest.mark.asyncio
-async def test_worker_shutdown_signal_handling(worker):
-    """Test shutdown signal handling."""
-    worker._handle_shutdown(signal.SIGTERM, None)
+async def test_worker_drains_and_closes_on_cancel(worker, mock_queue, mock_cache):
+    """On SIGTERM the consume task is cancelled; the worker drains and closes cleanly."""
 
-    assert worker.running is False
+    async def cancelled(*args, **kwargs):
+        raise asyncio.CancelledError
 
+    mock_queue.consume.side_effect = cancelled
 
-@pytest.mark.asyncio
-async def test_worker_graceful_shutdown_waits_for_current_message(worker, mock_queue, mock_cache):
-    """Test that shutdown waits for current message to complete."""
-    worker.current_message = "test-in-progress"
+    # start() should swallow the cancellation and run shutdown()
+    await worker.start()
 
-    async def clear_message():
-        await asyncio.sleep(0.1)
-        worker.current_message = None
-
-    # Start clearing message in background
-    clear_task = asyncio.create_task(clear_message())
-
-    # Shutdown should wait
-    await worker.shutdown()
-
-    # Message should be cleared
-    assert worker.current_message is None
-
-    await clear_task
-
-
-@pytest.mark.asyncio
-async def test_worker_graceful_shutdown_timeout(worker, mock_queue, mock_cache):
-    """Test that shutdown has a timeout for stuck messages."""
-    worker.current_message = "test-stuck"
-
-    with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-        # Make sleep instant to speed up test
-        mock_sleep.return_value = None
-
-        await worker.shutdown()
-
-        # Should have attempted to wait (30 iterations)
-        assert mock_sleep.call_count == 30
+    mock_queue.disconnect.assert_called_once()
+    mock_cache.close.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -289,16 +256,16 @@ async def test_send_to_dlq_includes_metadata(worker, mock_queue):
 
 
 @pytest.mark.asyncio
-async def test_send_to_dlq_handles_publish_failure(worker, mock_queue, caplog):
-    """Test that DLQ publish failures are logged."""
+async def test_send_to_dlq_handles_publish_failure(worker, mock_queue):
+    """Test that DLQ publish failures are swallowed and logged."""
     message = {"correlation_id": "test-dlq-fail"}
     mock_queue.publish.side_effect = Exception("Queue error")
 
-    # Should not raise exception
-    await worker._send_to_dlq(message, "Test error")
+    with capture_logs() as logs:
+        # Should not raise exception
+        await worker._send_to_dlq(message, "Test error")
 
-    # Should log error
-    assert "Failed to send message to DLQ" in caplog.text
+    assert any("Failed to send message to DLQ" in log["event"] for log in logs)
 
 
 @pytest.mark.asyncio
@@ -321,15 +288,15 @@ async def test_mark_failed_updates_cache(worker, mock_cache):
 
 
 @pytest.mark.asyncio
-async def test_mark_failed_handles_cache_errors(worker, mock_cache, caplog):
-    """Test that cache errors during mark_failed are logged."""
+async def test_mark_failed_handles_cache_errors(worker, mock_cache):
+    """Test that cache errors during mark_failed are swallowed and logged."""
     mock_cache.set.side_effect = Exception("Cache error")
 
-    # Should not raise exception
-    await worker._mark_failed("test-cache-fail", "Original error")
+    with capture_logs() as logs:
+        # Should not raise exception
+        await worker._mark_failed("test-cache-fail", "Original error")
 
-    # Should log error
-    assert "Failed to mark request as failed" in caplog.text
+    assert any("Failed to mark request as failed" in log["event"] for log in logs)
 
 
 @pytest.mark.asyncio

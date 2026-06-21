@@ -1,274 +1,143 @@
-"""Unit tests for proxy processor."""
+"""Tests for the queue-to-http MessageProcessor (reverse proxy)."""
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
 
-from openhqm.config.settings import EndpointConfig, settings
-from openhqm.exceptions import ConfigurationError, ProcessingError
+from openhqm.exceptions import ProcessingError
 from openhqm.worker.processor import MessageProcessor
 
 
-@pytest.fixture
-def mock_endpoint_config():
-    """Create a mock endpoint configuration."""
-    return EndpointConfig(
-        url="https://api.example.com/process",
-        method="POST",
-        timeout=300,
-        auth_type="bearer",
-        auth_token="test-token-123",
-        headers={"X-Service": "openhqm"},
-    )
+def _proxy(**overrides):
+    """Build a mock proxy settings object with sane defaults."""
+    proxy = MagicMock()
+    proxy.backend_url = "http://backend:8080"
+    proxy.method = ""
+    proxy.timeout = 30
+    proxy.headers = None
+    proxy.auth_type = None
+    proxy.auth_token = None
+    proxy.auth_username = None
+    proxy.auth_password = None
+    proxy.auth_header_name = None
+    proxy.forward_headers = ["Content-Type", "Accept", "User-Agent"]
+    proxy.strip_headers = ["Host", "Connection"]
+    for key, value in overrides.items():
+        setattr(proxy, key, value)
+    return proxy
 
 
-@pytest.fixture
-def mock_proxy_settings(mock_endpoint_config):
-    """Create mock proxy settings."""
-    with patch.object(settings, "proxy") as mock_proxy:
-        mock_proxy.enabled = True
-        mock_proxy.default_endpoint = "test-api"
-        mock_proxy.endpoints = {"test-api": mock_endpoint_config}
-        mock_proxy.forward_headers = ["Content-Type", "Authorization"]
-        mock_proxy.strip_headers = ["Host", "Connection"]
-        mock_proxy.max_response_size = 10 * 1024 * 1024
-        yield mock_proxy
-
-
-@pytest.mark.asyncio
-async def test_processor_proxy_request_success(mock_proxy_settings):
-    """Test successful proxy request."""
-    processor = MessageProcessor()
-
-    # Mock HTTP response
-    mock_response = AsyncMock()
-    mock_response.status = 200
-    mock_response.headers = {"Content-Type": "application/json", "X-Response-ID": "123"}
-    mock_response.json = AsyncMock(return_value={"result": "success", "data": "processed"})
-
-    # Mock async context manager
-    mock_context = AsyncMock()
-    mock_context.__aenter__ = AsyncMock(return_value=mock_response)
-    mock_context.__aexit__ = AsyncMock(return_value=None)
-
-    mock_session = AsyncMock()
-    # session.request should return the context manager directly, not a coroutine
-    mock_session.request = Mock(return_value=mock_context)
-
-    # Make _get_session return mock_session properly
-    async def mock_get_session():
-        return mock_session
-
-    with patch.object(processor, "_get_session", side_effect=mock_get_session):
-        result, status_code, headers = await processor.process(
-            payload={"operation": "test", "data": "hello"},
-            metadata={"endpoint": "test-api"},
-            headers={"Content-Type": "application/json"},
-        )
-
-    assert status_code == 200
-    assert result == {"result": "success", "data": "processed"}
-    assert "Content-Type" in headers
-
-    await processor.close()
+def _mock_response(status=200, json_body=None, content_type="application/json", text=""):
+    resp = MagicMock()
+    resp.status = status
+    resp.headers = {"Content-Type": content_type}
+    resp.json = AsyncMock(return_value=json_body or {})
+    resp.text = AsyncMock(return_value=text)
+    ctx = MagicMock()
+    ctx.__aenter__ = AsyncMock(return_value=resp)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    return ctx
 
 
 @pytest.mark.asyncio
-async def test_processor_prepare_bearer_auth():
-    """Test Bearer token authentication preparation."""
-    processor = MessageProcessor()
+async def test_proxy_success():
+    with patch("openhqm.worker.processor.settings") as s:
+        s.proxy = _proxy()
+        processor = MessageProcessor()
 
-    config = EndpointConfig(
-        url="https://api.example.com",
-        auth_type="bearer",
-        auth_token="my-bearer-token",
-    )
+        session = MagicMock()
+        session.request = MagicMock(return_value=_mock_response(json_body={"ok": True}))
+        processor._get_session = AsyncMock(return_value=session)
 
-    headers = processor._prepare_auth_headers(config)
+        body, status, headers = await processor.process({"data": "x"})
 
-    assert headers["Authorization"] == "Bearer my-bearer-token"
-
-
-@pytest.mark.asyncio
-async def test_processor_prepare_api_key_auth():
-    """Test API key authentication preparation."""
-    processor = MessageProcessor()
-
-    config = EndpointConfig(
-        url="https://api.example.com",
-        auth_type="api_key",
-        auth_token="my-api-key",
-        auth_header_name="X-API-Key",
-    )
-
-    headers = processor._prepare_auth_headers(config)
-
-    assert headers["X-API-Key"] == "my-api-key"
-
-
-@pytest.mark.asyncio
-async def test_processor_prepare_basic_auth():
-    """Test Basic authentication preparation."""
-    processor = MessageProcessor()
-
-    config = EndpointConfig(
-        url="https://api.example.com",
-        auth_type="basic",
-        auth_username="user",
-        auth_password="pass",
-    )
-
-    headers = processor._prepare_auth_headers(config)
-
-    assert "Authorization" in headers
-    assert headers["Authorization"].startswith("Basic ")
-
-
-@pytest.mark.asyncio
-async def test_processor_prepare_custom_auth():
-    """Test custom authentication preparation."""
-    processor = MessageProcessor()
-
-    config = EndpointConfig(
-        url="https://api.example.com",
-        auth_type="custom",
-        auth_header_name="X-Custom-Token",
-        auth_token="custom-token-value",
-    )
-
-    headers = processor._prepare_auth_headers(config)
-
-    assert headers["X-Custom-Token"] == "custom-token-value"
-
-
-@pytest.mark.asyncio
-async def test_processor_merge_headers(mock_proxy_settings):
-    """Test header merging with forwarding rules."""
-    processor = MessageProcessor()
-
-    config = EndpointConfig(
-        url="https://api.example.com",
-        headers={"X-Static": "static-value"},
-        auth_type="bearer",
-        auth_token="token123",
-    )
-
-    request_headers = {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer client-token",
-        "Host": "original-host.com",
-        "X-Custom": "custom-value",
-    }
-
-    merged = processor._merge_headers(config, request_headers)
-
-    # Static header should be present
-    assert merged["X-Static"] == "static-value"
-
-    # Auth header from config should override (tokens are masked in logs)
-    assert "Authorization" in merged
-    assert merged["Authorization"].startswith("Bearer ")
-
-    # Forwarded header should be present
-    assert merged["Content-Type"] == "application/json"
-
-    # Stripped header should not be present
-    assert "Host" not in merged
-
-
-@pytest.mark.asyncio
-async def test_processor_endpoint_not_found():
-    """Test error when endpoint is not found."""
-    processor = MessageProcessor()
-
-    with patch.object(settings, "proxy") as mock_proxy:
-        mock_proxy.enabled = True
-        mock_proxy.endpoints = {}
-        mock_proxy.default_endpoint = None
-
-        with pytest.raises(ConfigurationError, match="not found in configuration"):
-            await processor.process(
-                payload={"data": "test"},
-                metadata={"endpoint": "non-existent"},
-            )
-
-
-@pytest.mark.asyncio
-async def test_processor_proxy_disabled():
-    """Test fallback to example processing when proxy mode is disabled."""
-    processor = MessageProcessor()
-
-    with patch.object(settings, "proxy") as mock_proxy:
-        mock_proxy.enabled = False
-
-        # Should fall back to example processing instead of raising error
-        result, status, headers = await processor.process(
-            payload={"operation": "echo", "data": "test"}
-        )
-        assert result["output"] == "test"
-        assert "processed_at" in result
+        assert body == {"ok": True}
         assert status == 200
+        # POST is the default method when neither config nor metadata override it
+        assert session.request.call_args.kwargs["method"] == "POST"
 
 
 @pytest.mark.asyncio
-async def test_processor_http_error(mock_proxy_settings):
-    """Test handling of HTTP client errors."""
-    processor = MessageProcessor()
-
-    # Mock context manager that raises on enter
-    mock_context = AsyncMock()
-    mock_context.__aenter__.side_effect = aiohttp.ClientError("Connection failed")
-
-    mock_session = AsyncMock()
-    # session.request should return the context manager directly, not a coroutine
-    mock_session.request = Mock(return_value=mock_context)
-
-    # Make _get_session return mock_session properly
-    async def mock_get_session():
-        return mock_session
-
-    with patch.object(processor, "_get_session", side_effect=mock_get_session):
-        with pytest.raises(ProcessingError, match="Failed to proxy request"):
-            await processor.process(
-                payload={"data": "test"},
-                metadata={"endpoint": "test-api"},
-            )
-
-    await processor.close()
+async def test_proxy_no_backend_raises():
+    with patch("openhqm.worker.processor.settings") as s:
+        s.proxy = _proxy(backend_url="")
+        with pytest.raises(ProcessingError, match="No backend_url"):
+            await MessageProcessor().process({"data": "x"})
 
 
 @pytest.mark.asyncio
-async def test_processor_method_override(mock_proxy_settings):
-    """Test HTTP method override from metadata."""
-    processor = MessageProcessor()
+async def test_proxy_method_override_from_metadata():
+    with patch("openhqm.worker.processor.settings") as s:
+        s.proxy = _proxy()
+        processor = MessageProcessor()
+        session = MagicMock()
+        session.request = MagicMock(return_value=_mock_response())
+        processor._get_session = AsyncMock(return_value=session)
 
-    mock_response = AsyncMock()
-    mock_response.status = 200
-    mock_response.headers = {"Content-Type": "application/json"}
-    mock_response.json = AsyncMock(return_value={"status": "ok"})
+        await processor.process({}, metadata={"method": "put"})
+        assert session.request.call_args.kwargs["method"] == "PUT"
 
-    # Mock async context manager
-    mock_context = AsyncMock()
-    mock_context.__aenter__ = AsyncMock(return_value=mock_response)
-    mock_context.__aexit__ = AsyncMock(return_value=None)
 
-    mock_session = AsyncMock()
-    # session.request should return the context manager directly, not a coroutine
-    mock_session.request = Mock(return_value=mock_context)
+@pytest.mark.asyncio
+async def test_proxy_http_client_error_raises():
+    with patch("openhqm.worker.processor.settings") as s:
+        s.proxy = _proxy()
+        processor = MessageProcessor()
+        session = MagicMock()
+        session.request = MagicMock(side_effect=aiohttp.ClientError("boom"))
+        processor._get_session = AsyncMock(return_value=session)
 
-    # Make _get_session return mock_session properly
-    async def mock_get_session():
-        return mock_session
+        with pytest.raises(ProcessingError, match="Failed to proxy"):
+            await processor.process({})
 
-    with patch.object(processor, "_get_session", side_effect=mock_get_session):
-        await processor.process(
-            payload={"data": "test"},
-            metadata={"endpoint": "test-api", "method": "PUT"},
+
+@pytest.mark.asyncio
+async def test_bearer_auth_header():
+    with patch("openhqm.worker.processor.settings") as s:
+        s.proxy = _proxy(auth_type="bearer", auth_token="tok")
+        headers = MessageProcessor()._merge_headers(None)
+        assert headers["Authorization"] == "Bearer tok"
+
+
+@pytest.mark.asyncio
+async def test_api_key_auth_default_header():
+    with patch("openhqm.worker.processor.settings") as s:
+        s.proxy = _proxy(auth_type="api_key", auth_token="k")
+        headers = MessageProcessor()._merge_headers(None)
+        assert headers["X-API-Key"] == "k"
+
+
+@pytest.mark.asyncio
+async def test_basic_auth_header():
+    with patch("openhqm.worker.processor.settings") as s:
+        s.proxy = _proxy(auth_type="basic", auth_username="u", auth_password="p")
+        headers = MessageProcessor()._merge_headers(None)
+        # base64("u:p") == "dTpw"
+        assert headers["Authorization"] == "Basic dTpw"
+
+
+@pytest.mark.asyncio
+async def test_custom_auth_header():
+    with patch("openhqm.worker.processor.settings") as s:
+        s.proxy = _proxy(auth_type="custom", auth_token="v", auth_header_name="X-Token")
+        headers = MessageProcessor()._merge_headers(None)
+        assert headers["X-Token"] == "v"
+
+
+@pytest.mark.asyncio
+async def test_header_forwarding_and_strip():
+    with patch("openhqm.worker.processor.settings") as s:
+        s.proxy = _proxy(forward_headers=["X-Trace"], strip_headers=["X-Secret"])
+        headers = MessageProcessor()._merge_headers(
+            {"X-Trace": "1", "X-Secret": "no", "X-Other": "no"}
         )
+        assert headers == {"X-Trace": "1"}
 
-        # Verify PUT method was used
-        call_args = mock_session.request.call_args
-        assert call_args[1]["method"] == "PUT"
 
-    await processor.close()
+@pytest.mark.asyncio
+async def test_auth_overrides_forwarded_header():
+    with patch("openhqm.worker.processor.settings") as s:
+        s.proxy = _proxy(auth_type="bearer", auth_token="server", forward_headers=["Authorization"])
+        headers = MessageProcessor()._merge_headers({"Authorization": "Bearer client"})
+        assert headers["Authorization"] == "Bearer server"
