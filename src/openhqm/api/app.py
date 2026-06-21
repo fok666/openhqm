@@ -104,6 +104,17 @@ def create_app() -> FastAPI:
             components=components,
         )
 
+    # Readiness probe: 503 until queue + cache are reachable
+    @app.get("/ready", tags=["health"])
+    async def ready() -> Response:
+        """Kubernetes readiness probe."""
+        try:
+            await get_queue()
+            await get_cache()
+        except Exception:
+            return JSONResponse(status_code=503, content={"status": "not_ready"})
+        return JSONResponse(status_code=200, content={"status": "ready"})
+
     # Metrics endpoint
     if settings.monitoring.metrics_enabled:
 
