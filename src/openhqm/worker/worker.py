@@ -1,4 +1,4 @@
-"""Worker implementation for processing messages."""
+"""Worker for the queue-to-http mode: consume messages, proxy to the backend."""
 
 import asyncio
 import signal
@@ -21,7 +21,7 @@ logger = structlog.get_logger(__name__)
 
 
 class Worker:
-    """Message queue worker for processing requests."""
+    """Consume requests from the queue and forward them to the backend."""
 
     def __init__(
         self,
@@ -30,15 +30,6 @@ class Worker:
         cache: CacheInterface,
         processor: MessageProcessor,
     ):
-        """
-        Initialize worker.
-
-        Args:
-            worker_id: Unique worker identifier
-            queue: Message queue instance
-            cache: Cache instance
-            processor: Message processor
-        """
         self.worker_id = worker_id
         self.queue = queue
         self.cache = cache
@@ -47,51 +38,41 @@ class Worker:
         self.current_message: str | None = None
 
     async def start(self) -> None:
-        """Start the worker loop."""
+        """Consume until cancelled (SIGTERM/SIGINT), then drain and shut down."""
         self.running = True
-
-        # Register shutdown handlers
-        signal.signal(signal.SIGTERM, self._handle_shutdown)
-        signal.signal(signal.SIGINT, self._handle_shutdown)
-
+        metrics.worker_active.labels(worker_id=self.worker_id).set(1)
         logger.info("Worker started", worker_id=self.worker_id)
 
-        # Set worker active metric
-        metrics.worker_active.labels(worker_id=self.worker_id).set(1)
+        consume_task = asyncio.ensure_future(
+            self.queue.consume(
+                "requests", self._handle_message, batch_size=settings.worker.batch_size
+            )
+        )
+
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, consume_task.cancel)
+            except NotImplementedError:
+                # ponytail: add_signal_handler is Unix-only; Windows relies on KeyboardInterrupt
+                pass
 
         try:
-            await self.queue.consume(
-                "requests",
-                self._handle_message,
-                batch_size=settings.worker.batch_size,
-            )
-        except Exception:
-            logger.exception("Worker loop failed", worker_id=self.worker_id)
-            raise
+            await consume_task
+        except asyncio.CancelledError:
+            logger.info("Worker draining: stopped consuming", worker_id=self.worker_id)
         finally:
             await self.shutdown()
 
     async def _handle_message(self, message: dict[str, Any]) -> None:
-        """
-        Process a single message.
-
-        Args:
-            message: Message to process
-        """
+        """Process a single message: forward to backend, store the result for polling."""
         correlation_id = message.get("correlation_id")
         self.current_message = correlation_id
-
-        log = logger.bind(
-            worker_id=self.worker_id,
-            correlation_id=correlation_id,
-        )
-
+        log = logger.bind(worker_id=self.worker_id, correlation_id=correlation_id)
         log.info("Processing message")
-
         start_time = time.time()
 
         try:
-            # Update status to PROCESSING
             await self.cache.set(
                 f"req:{correlation_id}:meta",
                 {
@@ -99,20 +80,17 @@ class Worker:
                     "submitted_at": message.get("timestamp"),
                     "updated_at": datetime.now(UTC).isoformat(),
                 },
-                ttl=3600,
+                ttl=settings.cache.ttl_seconds,
             )
 
-            # Process message
             result, status_code, response_headers = await self.processor.process(
                 message["payload"],
                 metadata=message.get("metadata") or {},
                 headers=message.get("headers") or {},
-                full_message=message,
             )
 
             processing_time = (time.time() - start_time) * 1000  # ms
 
-            # Update status to COMPLETED
             await self.cache.set(
                 f"req:{correlation_id}:meta",
                 {
@@ -120,10 +98,8 @@ class Worker:
                     "submitted_at": message.get("timestamp"),
                     "updated_at": datetime.now(UTC).isoformat(),
                 },
-                ttl=3600,
+                ttl=settings.cache.ttl_seconds,
             )
-
-            # Store response
             await self.cache.set(
                 f"resp:{correlation_id}",
                 {
@@ -133,47 +109,24 @@ class Worker:
                     "processing_time_ms": int(processing_time),
                     "completed_at": datetime.now(UTC).isoformat(),
                 },
-                ttl=3600,
+                ttl=settings.cache.ttl_seconds,
             )
 
-            # Publish response to response queue
-            await self.queue.publish(
-                settings.queue.response_queue_name,
-                {
-                    "correlation_id": correlation_id,
-                    "result": result,
-                    "status_code": status_code,
-                    "headers": response_headers,
-                    "status": "COMPLETED",
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "processing_time_ms": int(processing_time),
-                },
-            )
-
-            log.info(
-                "Message processed successfully",
-                processing_time_ms=int(processing_time),
-            )
-
-            # Record metrics
+            log.info("Message processed successfully", processing_time_ms=int(processing_time))
             metrics.worker_processing_duration_seconds.labels(status="success").observe(
                 processing_time / 1000
             )
 
         except RetryableError as e:
             log.warning("Retryable error occurred", error=str(e))
-
             retry_count = message.get("metadata", {}).get("retry_count", 0)
-
             if retry_count < settings.worker.max_retries:
-                # Requeue with incremented retry count
                 message["metadata"]["retry_count"] = retry_count + 1
                 await self.queue.publish("requests", message)
                 log.info("Message requeued", retry_count=retry_count + 1)
             else:
                 log.error("Max retries exceeded, sending to DLQ")
                 await self._send_to_dlq(message, str(e))
-
             metrics.worker_errors_total.labels(error_type="retryable").inc()
 
         except FatalError as e:
@@ -192,15 +145,8 @@ class Worker:
             self.current_message = None
 
     async def _send_to_dlq(self, message: dict[str, Any], error: str) -> None:
-        """
-        Send failed message to dead letter queue.
-
-        Args:
-            message: Original message
-            error: Error description
-        """
+        """Send a failed message to the dead letter queue."""
         correlation_id = message.get("correlation_id")
-
         try:
             await self.queue.publish(
                 settings.queue.dlq_name,
@@ -211,137 +157,62 @@ class Worker:
                     "error": error,
                 },
             )
-
             logger.info("Message sent to DLQ", correlation_id=correlation_id)
             metrics.queue_dlq_total.labels(reason="processing_failed").inc()
-
         except Exception as e:
             logger.error(
-                "Failed to send message to DLQ",
-                correlation_id=correlation_id,
-                error=str(e),
+                "Failed to send message to DLQ", correlation_id=correlation_id, error=str(e)
             )
 
     async def _mark_failed(self, correlation_id: str, error: str) -> None:
-        """
-        Mark request as failed in cache.
-
-        Args:
-            correlation_id: Request correlation ID
-            error: Error description
-        """
+        """Mark a request FAILED in the cache so pollers see the error."""
         try:
             await self.cache.set(
                 f"req:{correlation_id}:meta",
-                {
-                    "status": "FAILED",
-                    "updated_at": datetime.now(UTC).isoformat(),
-                },
-                ttl=3600,
+                {"status": "FAILED", "updated_at": datetime.now(UTC).isoformat()},
+                ttl=settings.cache.ttl_seconds,
             )
-
             await self.cache.set(
                 f"resp:{correlation_id}",
-                {
-                    "error": error,
-                    "completed_at": datetime.now(UTC).isoformat(),
-                },
-                ttl=3600,
+                {"error": error, "completed_at": datetime.now(UTC).isoformat()},
+                ttl=settings.cache.ttl_seconds,
             )
-
         except Exception as e:
             logger.error(
-                "Failed to mark request as failed",
-                correlation_id=correlation_id,
-                error=str(e),
+                "Failed to mark request as failed", correlation_id=correlation_id, error=str(e)
             )
 
-    def _handle_shutdown(self, signum, frame) -> None:
-        """
-        Handle shutdown signal.
-
-        Args:
-            signum: Signal number
-            frame: Current stack frame
-        """
-        logger.info("Shutdown signal received", worker_id=self.worker_id, signal=signum)
-        self.running = False
-
     async def shutdown(self) -> None:
-        """Gracefully shutdown the worker."""
+        """Release resources. The in-flight message (if any) is already done or will be redelivered."""
         logger.info("Shutting down worker", worker_id=self.worker_id)
-
-        # Wait for current message to complete (with timeout)
-        if self.current_message:
-            logger.info("Waiting for current message to complete")
-            for _ in range(30):  # 30 seconds max
-                if not self.current_message:
-                    break
-                await asyncio.sleep(1)
-
-        # Clear worker active metric
         metrics.worker_active.labels(worker_id=self.worker_id).set(0)
-
         await self.queue.disconnect()
         await self.cache.close()
-
         logger.info("Worker shutdown complete", worker_id=self.worker_id)
 
 
-async def run_worker(worker_id: str, worker_index: int = 0, worker_count: int = 1):
-    """
-    Run a worker instance.
-
-    Args:
-        worker_id: Unique worker identifier
-        worker_index: Worker index for partition assignment (0-based)
-        worker_count: Total number of workers
-    """
+async def run_worker(worker_id: str) -> None:
+    """Create dependencies and run a worker instance."""
     from openhqm.utils.logging import setup_logging
 
     setup_logging()
+    logger.info("Initializing worker", worker_id=worker_id)
 
-    logger.info(
-        "Initializing worker",
-        worker_id=worker_id,
-        worker_index=worker_index,
-        worker_count=worker_count,
-    )
-
-    # Create queue and cache
     queue = await create_queue()
     cache = await create_cache()
-
-    # Create processor with worker_id for partitioning
-    processor = MessageProcessor(worker_id=worker_id)
-
-    # Set partition assignments if partitioning is enabled
-    if settings.partitioning.enabled:
-        processor.set_partition_assignments(worker_count, worker_index)
-        logger.info(
-            "Partition assignments configured",
-            worker_id=worker_id,
-            stats=processor.get_partition_stats(),
-        )
-
+    processor = MessageProcessor()
     try:
-        # Create and start worker
-        worker = Worker(worker_id, queue, cache, processor)
-        await worker.start()
+        await Worker(worker_id, queue, cache, processor).start()
     finally:
-        # Clean up processor
         await processor.close()
 
 
-async def main():
-    """Main entry point for worker."""
+async def main() -> None:
+    """Entry point for the queue-to-http worker."""
     import sys
 
     worker_id = sys.argv[1] if len(sys.argv) > 1 else "worker-1"
-    worker_index = int(sys.argv[2]) if len(sys.argv) > 2 else 0
-    worker_count = int(sys.argv[3]) if len(sys.argv) > 3 else settings.worker.count
-
-    await run_worker(worker_id, worker_index, worker_count)
+    await run_worker(worker_id)
 
 
 if __name__ == "__main__":
