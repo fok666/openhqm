@@ -83,5 +83,5 @@ USER openhqm
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Default command (can be overridden)
-CMD ["python", "-m", "openhqm.api.listener"]
+# Default command. Override with: python -m openhqm queue-to-http
+CMD ["python", "-m", "openhqm", "http-to-queue"]
