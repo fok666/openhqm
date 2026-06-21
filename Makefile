@@ -107,16 +107,16 @@ docker-down: ## Stop all services
 docker-logs: ## View Docker Compose logs
 	docker-compose logs -f
 
-run-api: ## Run API server locally
-	python -m openhqm.api.listener
+run-api: ## Run the http-to-queue listener locally
+	python -m openhqm http-to-queue
 
-run-worker: ## Run worker locally
-	python -m openhqm.worker.worker
+run-worker: ## Run the queue-to-http worker locally (set BACKEND_URL)
+	OPENHQM_PROXY__BACKEND_URL=$${BACKEND_URL:-http://localhost:8080} python -m openhqm queue-to-http
 
-run-all: ## Run API and worker in background
-	python -m openhqm.api.listener &
+run-all: ## Run both modes in background
+	python -m openhqm http-to-queue &
 	sleep 2
-	python -m openhqm.worker.worker worker-1 &
+	OPENHQM_PROXY__BACKEND_URL=$${BACKEND_URL:-http://localhost:8080} python -m openhqm queue-to-http worker-1 &
 
 dev: ## Start development environment
 	docker-compose up redis -d
@@ -124,8 +124,8 @@ dev: ## Start development environment
 	make run-api
 
 stop: ## Stop all running processes
-	pkill -f "openhqm.api.listener" || true
-	pkill -f "openhqm.worker.worker" || true
+	pkill -f "openhqm http-to-queue" || true
+	pkill -f "openhqm queue-to-http" || true
 
 coverage: ## Generate coverage report
 	pytest tests/ --cov=openhqm --cov-report=html
