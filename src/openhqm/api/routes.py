@@ -172,7 +172,7 @@ async def get_status(
 async def get_response(
     correlation_id: str,
     cache: CacheInterface = Depends(get_cache),
-) -> ResultResponse:
+) -> ResultResponse | JSONResponse:
     """
     Get the result of a processed request.
 
