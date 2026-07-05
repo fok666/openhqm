@@ -10,6 +10,7 @@ USAGE = "usage: python -m openhqm [http-to-queue|queue-to-http]"
 
 
 def main() -> None:
+    """Run the selected sidecar mode based on command line arguments."""
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     # Drop the mode arg so downstream sys.argv parsing (e.g. worker id) is unaffected.
     sys.argv = [sys.argv[0], *sys.argv[2:]]
