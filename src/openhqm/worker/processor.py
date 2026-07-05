@@ -48,10 +48,11 @@ class MessageProcessor:
         """Merge static + forwarded client + auth headers (auth wins)."""
         headers: dict[str, str] = dict(settings.proxy.headers or {})
 
-        forward = settings.proxy.forward_headers
-        strip = settings.proxy.strip_headers
+        forward = {h.lower() for h in settings.proxy.forward_headers}
+        strip = {h.lower() for h in settings.proxy.strip_headers}
         for key, value in (request_headers or {}).items():
-            if (key in forward or "*" in forward) and key not in strip:
+            key_lower = key.lower()
+            if (key_lower in forward or "*" in forward) and key_lower not in strip:
                 headers[key] = value
 
         headers.update(self._auth_headers())
