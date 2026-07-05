@@ -71,7 +71,7 @@ class MessageProcessor:
         """
         url = settings.proxy.backend_url
         if not url:
-            raise ProcessingError("No backend_url configured (set OPENHQM_PROXY__BACKEND_URL)")
+            raise FatalError("No backend_url configured (set OPENHQM_PROXY__BACKEND_URL)")
 
         metadata = metadata or {}
         method = (metadata.get("method") or settings.proxy.method or "POST").upper()
