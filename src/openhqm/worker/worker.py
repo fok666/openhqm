@@ -122,6 +122,7 @@ class Worker:
             retry_count = message.get("metadata", {}).get("retry_count", 0)
             if retry_count < settings.worker.max_retries:
                 message["metadata"]["retry_count"] = retry_count + 1
+                await asyncio.sleep(2 ** retry_count)
                 await self.queue.publish("requests", message)
                 log.info("Message requeued", retry_count=retry_count + 1)
             else:
