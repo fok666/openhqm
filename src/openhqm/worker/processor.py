@@ -7,7 +7,7 @@ import aiohttp
 import structlog
 
 from openhqm.config.settings import settings
-from openhqm.exceptions import ProcessingError
+from openhqm.exceptions import FatalError, ProcessingError, RetryableError
 
 logger = structlog.get_logger(__name__)
 
