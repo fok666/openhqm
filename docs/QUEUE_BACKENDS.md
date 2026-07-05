@@ -70,7 +70,6 @@ queue:
   type: redis
   redis_url: "redis://localhost:6379/0"
   request_queue_name: "openhqm-requests"
-  response_queue_name: "openhqm-responses"
   dlq_name: "openhqm-dlq"
 ```
 

@@ -1,0 +1,95 @@
+# OpenHQM behind a Kubernetes Gateway, deployed as sidecars.
+#
+#   client ──HTTPRoute──▶ openhqm-ingress (http-to-queue)  ──┐
+#                                                            │ request queue (Redis)
+#                          app pod ◀── queue-to-http sidecar ┘  forwards to localhost app
+#
+# The Gateway does the routing; OpenHQM just adds the async queue hop.
+# Requires a Gateway API implementation (e.g. Istio, Envoy Gateway, Contour) in the cluster.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openhqm-config
+data:
+  OPENHQM_QUEUE__TYPE: "redis"
+  OPENHQM_QUEUE__REDIS_URL: "redis://redis:6379"
+  OPENHQM_CACHE__TYPE: "redis"
+  OPENHQM_CACHE__REDIS_URL: "redis://redis:6379"
+  OPENHQM_MONITORING__LOG_LEVEL: "INFO"
+---
+# Mode 1: HTTP → Queue. Accepts client HTTP, enqueues, serves poll results.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openhqm-ingress
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: openhqm-ingress }
+  template:
+    metadata:
+      labels: { app: openhqm-ingress }
+    spec:
+      terminationGracePeriodSeconds: 30   # let in-flight HTTP drain
+      containers:
+        - name: openhqm
+          image: ghcr.io/yourusername/openhqm:latest-redis
+          args: ["python", "-m", "openhqm", "http-to-queue"]
+          ports: [{ containerPort: 8000 }]
+          envFrom: [{ configMapRef: { name: openhqm-config } }]
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 5
+          readinessProbe:
+            httpGet: { path: /ready, port: 8000 }   # 503 until queue + cache reachable
+            initialDelaySeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openhqm-ingress
+spec:
+  selector: { app: openhqm-ingress }
+  ports: [{ port: 80, targetPort: 8000 }]
+---
+# The Gateway routes external traffic to the ingress Service.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: openhqm
+spec:
+  parentRefs:
+    - name: my-gateway          # an existing Gateway in the cluster
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: /api/v1 }
+      backendRefs:
+        - name: openhqm-ingress
+          port: 80
+---
+# Mode 2: Queue → HTTP. Runs as a sidecar next to the app; forwards to localhost.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: my-app }
+  template:
+    metadata:
+      labels: { app: my-app }
+    spec:
+      terminationGracePeriodSeconds: 30   # sidecar drains the in-flight message on SIGTERM
+      containers:
+        - name: app                       # your unchanged workload
+          image: my-app:latest
+          ports: [{ containerPort: 8080 }]
+        - name: openhqm                    # queue-to-http sidecar
+          image: ghcr.io/yourusername/openhqm:latest-redis
+          args: ["python", "-m", "openhqm", "queue-to-http"]
+          envFrom: [{ configMapRef: { name: openhqm-config } }]
+          env:
+            - name: OPENHQM_PROXY__BACKEND_URL
+              value: "http://localhost:8080"   # the app container in this pod

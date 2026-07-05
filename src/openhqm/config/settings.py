@@ -2,14 +2,12 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-from openhqm.partitioning.models import PartitionConfig
 
 
 class ServerSettings(BaseSettings):
-    """HTTP server configuration."""
+    """HTTP server configuration (http-to-queue mode)."""
 
     host: str = Field(default="0.0.0.0", description="Server host")
     port: int = Field(default=8000, description="Server port", ge=0, le=65535)
@@ -80,67 +78,47 @@ class QueueSettings(BaseSettings):
     request_queue_name: str = Field(
         default="openhqm-requests", description="Request queue/topic name"
     )
-    response_queue_name: str = Field(
-        default="openhqm-responses", description="Response queue/topic name"
-    )
     dlq_name: str = Field(default="openhqm-dlq", description="Dead letter queue name")
 
 
 class WorkerSettings(BaseSettings):
-    """Worker configuration."""
+    """Worker configuration (queue-to-http mode)."""
 
     count: int = Field(default=5, description="Number of worker instances")
     batch_size: int = Field(default=10, description="Messages to process per batch")
-    timeout_seconds: int = Field(default=300, description="Processing timeout")
     max_retries: int = Field(default=3, description="Maximum retry attempts")
-    retry_delay_base: float = Field(default=1.0, description="Base retry delay in seconds")
-    retry_delay_max: float = Field(default=60.0, description="Maximum retry delay in seconds")
-
-
-class EndpointConfig(BaseModel):
-    """Configuration for a single endpoint."""
-
-    url: str = Field(..., description="Target endpoint URL", min_length=1)
-    method: str = Field(default="POST", description="HTTP method to use")
-    timeout: int = Field(default=300, description="Request timeout in seconds", ge=0)
-    headers: dict[str, str] | None = Field(default=None, description="Static headers to include")
-    auth_type: Literal["bearer", "basic", "api_key", "custom"] | None = Field(
-        default=None, description="Authentication type"
-    )
-    auth_token: str | None = Field(default=None, description="Auth token for bearer/api_key")
-    auth_username: str | None = Field(default=None, description="Username for basic auth")
-    auth_password: str | None = Field(default=None, description="Password for basic auth")
-    auth_header_name: str | None = Field(
-        default=None,
-        description="Header name for api_key/custom auth (defaults to X-API-Key for api_key type)",
-    )
 
 
 class ProxySettings(BaseSettings):
-    """Reverse proxy configuration for endpoints."""
+    """Backend the queue-to-http worker forwards to (typically the local sidecar app)."""
 
-    enabled: bool = Field(default=False, description="Enable proxy mode")
-    default_endpoint: str | None = Field(
-        default=None, description="Default endpoint URL if no routing specified"
+    backend_url: str = Field(default="", description="Backend base URL, e.g. http://localhost:8080")
+    method: str = Field(default="", description="Override HTTP method; empty uses request's method")
+    timeout: int = Field(default=300, description="Request timeout in seconds", ge=0)
+    headers: dict[str, str] | None = Field(
+        default=None, description="Static headers added to every backend request"
     )
-    endpoints: dict[str, EndpointConfig] = Field(
-        default_factory=dict, description="Named endpoint configurations"
+    auth_type: Literal["bearer", "basic", "api_key", "custom"] | None = Field(
+        default=None, description="Authentication type"
+    )
+    auth_token: str | None = Field(default=None, description="Auth token for bearer/api_key/custom")
+    auth_username: str | None = Field(default=None, description="Username for basic auth")
+    auth_password: str | None = Field(default=None, description="Password for basic auth")
+    auth_header_name: str | None = Field(
+        default=None, description="Header name for api_key/custom (api_key defaults to X-API-Key)"
     )
     forward_headers: list[str] = Field(
         default_factory=lambda: ["Content-Type", "Accept", "User-Agent"],
-        description="Headers to forward from client",
+        description="Client headers to forward ('*' forwards all)",
     )
     strip_headers: list[str] = Field(
         default_factory=lambda: ["Host", "Connection"],
         description="Headers to strip before forwarding",
     )
-    max_response_size: int = Field(
-        default=10 * 1024 * 1024, description="Maximum response size in bytes (10MB)"
-    )
 
 
 class CacheSettings(BaseSettings):
-    """Cache configuration."""
+    """Cache configuration (stores results for polling)."""
 
     type: Literal["redis", "memory"] = Field(default="redis", description="Cache backend type")
     redis_url: str = Field(default="redis://localhost:6379", description="Redis connection URL")
@@ -154,18 +132,6 @@ class MonitoringSettings(BaseSettings):
     metrics_enabled: bool = Field(default=True, description="Enable Prometheus metrics")
     log_level: str = Field(default="INFO", description="Logging level")
     log_format: Literal["json", "text"] = Field(default="json", description="Log format")
-
-
-class RoutingSettings(BaseSettings):
-    """Routing configuration."""
-
-    enabled: bool = Field(default=False, description="Enable routing engine")
-    config_path: str | None = Field(
-        default=None, description="Path to routing config file (YAML/JSON)"
-    )
-    config_dict: dict[str, Any] | None = Field(
-        default=None, description="Inline routing configuration"
-    )
 
 
 class Settings(BaseSettings):
@@ -185,8 +151,6 @@ class Settings(BaseSettings):
     proxy: ProxySettings = Field(default_factory=ProxySettings)
     cache: CacheSettings = Field(default_factory=CacheSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
-    routing: RoutingSettings = Field(default_factory=RoutingSettings)
-    partitioning: PartitionConfig = Field(default_factory=PartitionConfig)
 
 
 # Global settings instance

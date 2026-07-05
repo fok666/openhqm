@@ -1,5 +1,4 @@
 services:
-  # Redis service
   redis:
     image: redis:7-alpine
     container_name: openhqm-redis
@@ -16,22 +15,28 @@ services:
     networks:
       - openhqm
 
-  # API service
-  api:
+  # Stand-in for "your app" — the backend the worker forwards to.
+  backend:
+    image: kennethreitz/httpbin
+    container_name: openhqm-backend
+    networks:
+      - openhqm
+
+  # Mode 1: HTTP → Queue
+  ingress:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: openhqm-api
+    container_name: openhqm-ingress
     ports:
       - "8000:8000"
     environment:
       - OPENHQM_QUEUE__REDIS_URL=redis://redis:6379
       - OPENHQM_CACHE__REDIS_URL=redis://redis:6379
-      - OPENHQM_MONITORING__LOG_LEVEL=INFO
     depends_on:
       redis:
         condition: service_healthy
-    command: python -m openhqm.api.listener
+    command: python -m openhqm http-to-queue
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -42,7 +47,7 @@ services:
       - openhqm
     restart: unless-stopped
 
-  # Worker service
+  # Mode 2: Queue → HTTP (forwards to the backend)
   worker:
     build:
       context: .
@@ -50,13 +55,11 @@ services:
     environment:
       - OPENHQM_QUEUE__REDIS_URL=redis://redis:6379
       - OPENHQM_CACHE__REDIS_URL=redis://redis:6379
-      - OPENHQM_MONITORING__LOG_LEVEL=INFO
+      - OPENHQM_PROXY__BACKEND_URL=http://backend/post
     depends_on:
       redis:
         condition: service_healthy
-      api:
-        condition: service_healthy
-    command: python -m openhqm.worker.worker worker-${WORKER_ID:-1}
+    command: python -m openhqm queue-to-http worker-${WORKER_ID:-1}
     deploy:
       replicas: 3
     networks:
