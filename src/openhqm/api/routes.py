@@ -7,6 +7,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
+from openhqm import metrics
 from openhqm.api.dependencies import get_cache, get_queue
 from openhqm.api.models import (
     RequestStatus,
@@ -19,7 +20,6 @@ from openhqm.cache import Cache, meta_key, resp_key
 from openhqm.config import settings
 from openhqm.exceptions import QueueError
 from openhqm.queue import Queue
-from openhqm.utils.metrics import metrics
 
 logger = structlog.get_logger(__name__)
 
@@ -70,7 +70,7 @@ async def submit_request(
         "payload": request.payload,
         "headers": request.headers,
         "timestamp": submitted_at.isoformat(),
-        "metadata": request.metadata.model_dump() if request.metadata else {},
+        "metadata": request.metadata or {},
     }
 
     try:
@@ -82,7 +82,7 @@ async def submit_request(
                 "submitted_at": submitted_at.isoformat(),
                 "updated_at": submitted_at.isoformat(),
             },
-            ttl=3600,
+            ttl=settings.cache.ttl_seconds,
         )
 
         # Publish to queue

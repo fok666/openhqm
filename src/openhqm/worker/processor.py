@@ -6,7 +6,7 @@ from typing import Any
 import aiohttp
 import structlog
 
-from openhqm.config.settings import settings
+from openhqm.config import settings
 from openhqm.exceptions import FatalError, RetryableError
 
 logger = structlog.get_logger(__name__)

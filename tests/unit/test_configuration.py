@@ -3,12 +3,13 @@
 import pytest
 from pydantic import ValidationError
 
-from openhqm.config.settings import (
+from openhqm.config import (
     MonitoringSettings,
     ProxySettings,
     QueueSettings,
     ServerSettings,
     Settings,
+    WorkerSettings,
 )
 
 
@@ -52,6 +53,14 @@ class TestQueueSettings:
     def test_invalid_type_rejected(self):
         with pytest.raises(ValidationError):
             QueueSettings(type="not-a-queue")
+
+
+class TestWorkerSettings:
+    """Consume loop configuration."""
+
+    def test_defaults_and_override(self):
+        assert WorkerSettings().batch_size == 10
+        assert WorkerSettings(batch_size=20, max_retries=5).max_retries == 5
 
 
 class TestServerSettings:

@@ -1,4 +1,8 @@
-"""Application settings and configuration."""
+"""All OpenHQM knobs, set via environment: prefix OPENHQM_, __ for nesting.
+
+Example: OPENHQM_QUEUE__TYPE=kafka sets Settings().queue.type.
+See .env.example for a ready-to-copy list.
+"""
 
 from typing import Any, Literal
 
@@ -7,86 +11,79 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ServerSettings(BaseSettings):
-    """HTTP server configuration (http-to-queue mode)."""
+    """HTTP server (http-to-queue mode)."""
 
-    host: str = Field(default="0.0.0.0", description="Server host")
-    port: int = Field(default=8000, description="Server port", ge=0, le=65535)
-    workers: int = Field(default=4, description="Number of Uvicorn workers")
-    reload: bool = Field(default=False, description="Enable auto-reload")
+    host: str = Field(default="0.0.0.0", description="Bind address")
+    port: int = Field(default=8000, description="Bind port", ge=0, le=65535)
+    workers: int = Field(default=4, description="Uvicorn worker processes")
 
 
 class QueueSettings(BaseSettings):
-    """Message queue configuration."""
+    """Queue backend selection plus per-backend connection settings."""
 
     type: Literal["redis", "kafka", "sqs", "azure_eventhubs", "gcp_pubsub", "mqtt", "custom"] = (
-        Field(default="redis", description="Queue backend type")
+        Field(default="redis", description="Queue backend")
     )
+    request_queue_name: str = Field(
+        default="openhqm-requests", description="Request queue/topic/stream name"
+    )
+    dlq_name: str = Field(default="openhqm-dlq", description="Dead letter queue name")
 
-    # Redis Streams configuration
+    # redis
     redis_url: str = Field(default="redis://localhost:6379", description="Redis connection URL")
 
-    # Apache Kafka configuration
+    # kafka
     kafka_bootstrap_servers: str = Field(
         default="localhost:9092", description="Kafka bootstrap servers (comma-separated)"
     )
     kafka_consumer_group: str = Field(
         default="openhqm-workers", description="Kafka consumer group ID"
     )
-    kafka_topics: list[str] = Field(
-        default_factory=lambda: ["openhqm-requests"], description="Kafka topics to consume"
+
+    # sqs (credentials come from the standard AWS env/IAM chain)
+    sqs_region: str = Field(default="us-east-1", description="AWS region")
+    sqs_queue_url: str = Field(
+        default="", description="Request queue URL (optional; resolved by name when empty)"
     )
 
-    # AWS SQS configuration
-    sqs_region: str = Field(default="us-east-1", description="AWS region for SQS")
-    sqs_queue_url: str = Field(default="", description="SQS queue URL")
-
-    # Azure Event Hubs configuration
+    # azure_eventhubs (event hubs named after request_queue_name/dlq_name must exist)
     azure_eventhubs_connection_string: str = Field(
-        default="", description="Azure Event Hubs connection string"
+        default="", description="Event Hubs namespace connection string"
     )
-    azure_eventhubs_name: str = Field(default="openhqm", description="Event Hub name")
     azure_eventhubs_consumer_group: str = Field(
         default="$Default", description="Event Hubs consumer group"
     )
     azure_eventhubs_checkpoint_store: str = Field(
-        default="", description="Azure Blob Storage connection for checkpoints"
+        default="", description="Blob Storage connection string for checkpoints (optional)"
     )
 
-    # GCP Pub/Sub configuration
+    # gcp_pubsub (topic and subscription named after the queue name must exist)
     gcp_project_id: str = Field(default="", description="GCP project ID")
-    gcp_credentials_path: str = Field(default="", description="Path to GCP service account JSON")
-    gcp_max_messages: int = Field(default=10, description="Max messages to pull per request")
+    gcp_credentials_path: str = Field(
+        default="", description="Service account JSON path (empty = ADC)"
+    )
 
-    # MQTT configuration
+    # mqtt
     mqtt_broker_host: str = Field(default="localhost", description="MQTT broker hostname")
     mqtt_broker_port: int = Field(default=1883, description="MQTT broker port")
     mqtt_username: str = Field(default="", description="MQTT username")
     mqtt_password: str = Field(default="", description="MQTT password")
-    mqtt_qos: int = Field(default=1, description="MQTT Quality of Service (0, 1, or 2)")
-    mqtt_client_id: str = Field(default="", description="MQTT client ID (auto-generated if empty)")
+    mqtt_qos: int = Field(default=1, description="MQTT QoS (0, 1, or 2)", ge=0, le=2)
+    mqtt_client_id: str = Field(default="", description="Client ID (auto-generated if empty)")
 
-    # Custom queue handler configuration
-    custom_module: str = Field(
-        default="", description="Python module path for custom queue handler"
-    )
-    custom_class: str = Field(default="", description="Class name for custom queue handler")
+    # custom: load your own Queue implementation at runtime
+    custom_module: str = Field(default="", description="Python module path of your Queue class")
+    custom_class: str = Field(default="", description="Class name of your Queue implementation")
     custom_config: dict[str, Any] = Field(
-        default_factory=dict, description="Custom configuration passed to handler"
+        default_factory=dict, description="Constructor kwargs for the custom class"
     )
-
-    # Common queue settings
-    request_queue_name: str = Field(
-        default="openhqm-requests", description="Request queue/topic name"
-    )
-    dlq_name: str = Field(default="openhqm-dlq", description="Dead letter queue name")
 
 
 class WorkerSettings(BaseSettings):
-    """Worker configuration (queue-to-http mode)."""
+    """Consume loop (queue-to-http mode)."""
 
-    count: int = Field(default=5, description="Number of worker instances")
-    batch_size: int = Field(default=10, description="Messages to process per batch")
-    max_retries: int = Field(default=3, description="Maximum retry attempts")
+    batch_size: int = Field(default=10, description="Messages fetched per poll", ge=1)
+    max_retries: int = Field(default=3, description="Retries before a message goes to the DLQ")
 
 
 class ProxySettings(BaseSettings):
@@ -118,18 +115,17 @@ class ProxySettings(BaseSettings):
 
 
 class CacheSettings(BaseSettings):
-    """Cache configuration (stores results for polling)."""
+    """Result store (Redis) polled by clients."""
 
-    type: Literal["redis", "memory"] = Field(default="redis", description="Cache backend type")
     redis_url: str = Field(default="redis://localhost:6379", description="Redis connection URL")
-    ttl_seconds: int = Field(default=3600, description="Default cache TTL")
-    max_connections: int = Field(default=10, description="Maximum connection pool size")
+    ttl_seconds: int = Field(default=3600, description="How long results stay pollable")
+    max_connections: int = Field(default=10, description="Connection pool size")
 
 
 class MonitoringSettings(BaseSettings):
-    """Monitoring and observability configuration."""
+    """Observability."""
 
-    metrics_enabled: bool = Field(default=True, description="Enable Prometheus metrics")
+    metrics_enabled: bool = Field(default=True, description="Expose Prometheus /metrics")
     log_level: str = Field(default="INFO", description="Logging level")
     log_format: Literal["json", "text"] = Field(default="json", description="Log format")
 
@@ -153,5 +149,4 @@ class Settings(BaseSettings):
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
 
 
-# Global settings instance
 settings = Settings()

@@ -8,11 +8,11 @@ from typing import Any
 
 import structlog
 
+from openhqm import metrics
 from openhqm.cache import Cache, create_cache, meta_key, resp_key
 from openhqm.config import settings
 from openhqm.exceptions import FatalError, RetryableError
 from openhqm.queue import Queue, create_queue
-from openhqm.utils.metrics import metrics
 from openhqm.worker.processor import MessageProcessor
 
 logger = structlog.get_logger(__name__)
@@ -204,7 +204,7 @@ class Worker:
 
 async def run_worker(worker_id: str) -> None:
     """Create dependencies and run a worker instance."""
-    from openhqm.utils.logging import setup_logging
+    from openhqm.logging import setup_logging
 
     setup_logging()
     logger.info("Initializing worker", worker_id=worker_id)

@@ -10,13 +10,12 @@ from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response
 
-from openhqm import __version__
+from openhqm import __version__, metrics
 from openhqm.api.dependencies import cleanup_resources, get_cache, get_queue
 from openhqm.api.models import HealthResponse
 from openhqm.api.routes import router
 from openhqm.config import settings
-from openhqm.utils.logging import setup_logging
-from openhqm.utils.metrics import metrics
+from openhqm.logging import setup_logging
 
 logger = structlog.get_logger(__name__)
 

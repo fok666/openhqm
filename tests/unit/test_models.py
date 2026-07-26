@@ -6,7 +6,6 @@ import pytest
 from pydantic import ValidationError
 
 from openhqm.api.models import (
-    RequestMetadata,
     RequestStatus,
     ResultResponse,
     StatusResponse,
@@ -19,12 +18,11 @@ def test_submit_request_valid():
     """Test valid submit request."""
     request = SubmitRequest(
         payload={"operation": "test", "data": "value"},
-        metadata=RequestMetadata(priority=5, timeout=300),
+        metadata={"method": "PUT", "trace_id": "abc"},
     )
 
     assert request.payload == {"operation": "test", "data": "value"}
-    assert request.metadata.priority == 5
-    assert request.metadata.timeout == 300
+    assert request.metadata == {"method": "PUT", "trace_id": "abc"}
 
 
 def test_submit_request_no_metadata():
@@ -35,23 +33,10 @@ def test_submit_request_no_metadata():
     assert request.metadata is None
 
 
-def test_request_metadata_validation():
-    """Test request metadata validation."""
-    # Valid priority
-    metadata = RequestMetadata(priority=5)
-    assert metadata.priority == 5
-
-    # Invalid priority (too high)
+def test_submit_request_requires_payload():
+    """Payload is the only mandatory field."""
     with pytest.raises(ValidationError):
-        RequestMetadata(priority=10)
-
-    # Invalid priority (negative)
-    with pytest.raises(ValidationError):
-        RequestMetadata(priority=-1)
-
-    # Invalid timeout (non-positive)
-    with pytest.raises(ValidationError):
-        RequestMetadata(timeout=0)
+        SubmitRequest()
 
 
 def test_submit_response():
@@ -117,4 +102,3 @@ def test_request_status_enum():
     assert RequestStatus.PROCESSING.value == "PROCESSING"
     assert RequestStatus.COMPLETED.value == "COMPLETED"
     assert RequestStatus.FAILED.value == "FAILED"
-    assert RequestStatus.TIMEOUT.value == "TIMEOUT"
