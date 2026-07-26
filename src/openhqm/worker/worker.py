@@ -61,7 +61,15 @@ class Worker:
             await consume_task
         except asyncio.CancelledError:
             logger.info("Worker draining: stopped consuming", worker_id=self.worker_id)
+        except Exception:
+            logger.exception("Worker loop failed", worker_id=self.worker_id)
+            raise
         finally:
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                try:
+                    loop.remove_signal_handler(sig)
+                except NotImplementedError:
+                    pass
             await self.shutdown()
 
     async def _handle_message(self, message: dict[str, Any]) -> None:
@@ -122,7 +130,9 @@ class Worker:
             retry_count = message.get("metadata", {}).get("retry_count", 0)
             if retry_count < settings.worker.max_retries:
                 message["metadata"]["retry_count"] = retry_count + 1
-                await asyncio.sleep(2 ** retry_count)
+                # ponytail: blocking backoff (worst case ~2^max_retries s); move to
+                # delayed redelivery on the queue if per-worker throughput matters
+                await asyncio.sleep(2**retry_count)
                 await self.queue.publish("requests", message)
                 log.info("Message requeued", retry_count=retry_count + 1)
             else:

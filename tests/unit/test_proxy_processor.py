@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
-from openhqm.exceptions import ProcessingError
+from openhqm.exceptions import FatalError, RetryableError
 from openhqm.worker.processor import MessageProcessor
 
 
@@ -59,10 +59,29 @@ async def test_proxy_success():
 
 
 @pytest.mark.asyncio
+async def test_proxy_empty_json_body_falls_back_to_text():
+    with patch("openhqm.worker.processor.settings") as s:
+        s.proxy = _proxy()
+        processor = MessageProcessor()
+
+        ctx = _mock_response(status=204)
+        resp = await ctx.__aenter__()
+        resp.json = AsyncMock(side_effect=ValueError("empty body"))
+        session = MagicMock()
+        session.request = MagicMock(return_value=ctx)
+        processor._get_session = AsyncMock(return_value=session)
+
+        body, status, _ = await processor.process({"data": "x"})
+
+        assert status == 204
+        assert body == {"response": "", "content_type": "application/json"}
+
+
+@pytest.mark.asyncio
 async def test_proxy_no_backend_raises():
     with patch("openhqm.worker.processor.settings") as s:
         s.proxy = _proxy(backend_url="")
-        with pytest.raises(ProcessingError, match="No backend_url"):
+        with pytest.raises(FatalError, match="No backend_url"):
             await MessageProcessor().process({"data": "x"})
 
 
@@ -88,7 +107,7 @@ async def test_proxy_http_client_error_raises():
         session.request = MagicMock(side_effect=aiohttp.ClientError("boom"))
         processor._get_session = AsyncMock(return_value=session)
 
-        with pytest.raises(ProcessingError, match="Failed to proxy"):
+        with pytest.raises(RetryableError, match="Failed to proxy"):
             await processor.process({})
 
 
@@ -97,7 +116,7 @@ async def test_bearer_auth_header():
     with patch("openhqm.worker.processor.settings") as s:
         s.proxy = _proxy(auth_type="bearer", auth_token="tok")
         headers = MessageProcessor()._merge_headers(None)
-        assert headers["Authorization"] == "Bearer tok"
+        assert headers["authorization"] == "Bearer tok"
 
 
 @pytest.mark.asyncio
@@ -105,7 +124,7 @@ async def test_api_key_auth_default_header():
     with patch("openhqm.worker.processor.settings") as s:
         s.proxy = _proxy(auth_type="api_key", auth_token="k")
         headers = MessageProcessor()._merge_headers(None)
-        assert headers["X-API-Key"] == "k"
+        assert headers["x-api-key"] == "k"
 
 
 @pytest.mark.asyncio
@@ -114,7 +133,7 @@ async def test_basic_auth_header():
         s.proxy = _proxy(auth_type="basic", auth_username="u", auth_password="p")
         headers = MessageProcessor()._merge_headers(None)
         # base64("u:p") == "dTpw"
-        assert headers["Authorization"] == "Basic dTpw"
+        assert headers["authorization"] == "Basic dTpw"
 
 
 @pytest.mark.asyncio
@@ -122,7 +141,7 @@ async def test_custom_auth_header():
     with patch("openhqm.worker.processor.settings") as s:
         s.proxy = _proxy(auth_type="custom", auth_token="v", auth_header_name="X-Token")
         headers = MessageProcessor()._merge_headers(None)
-        assert headers["X-Token"] == "v"
+        assert headers["x-token"] == "v"
 
 
 @pytest.mark.asyncio
@@ -132,7 +151,7 @@ async def test_header_forwarding_and_strip():
         headers = MessageProcessor()._merge_headers(
             {"X-Trace": "1", "X-Secret": "no", "X-Other": "no"}
         )
-        assert headers == {"X-Trace": "1"}
+        assert headers == {"x-trace": "1"}
 
 
 @pytest.mark.asyncio
@@ -140,4 +159,4 @@ async def test_auth_overrides_forwarded_header():
     with patch("openhqm.worker.processor.settings") as s:
         s.proxy = _proxy(auth_type="bearer", auth_token="server", forward_headers=["Authorization"])
         headers = MessageProcessor()._merge_headers({"Authorization": "Bearer client"})
-        assert headers["Authorization"] == "Bearer server"
+        assert headers["authorization"] == "Bearer server"

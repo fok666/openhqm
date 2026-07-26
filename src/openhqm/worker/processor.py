@@ -7,7 +7,7 @@ import aiohttp
 import structlog
 
 from openhqm.config.settings import settings
-from openhqm.exceptions import FatalError, ProcessingError, RetryableError
+from openhqm.exceptions import FatalError, RetryableError
 
 logger = structlog.get_logger(__name__)
 
@@ -46,16 +46,17 @@ class MessageProcessor:
 
     def _merge_headers(self, request_headers: dict[str, str] | None) -> dict[str, str]:
         """Merge static + forwarded client + auth headers (auth wins)."""
-        headers: dict[str, str] = dict(settings.proxy.headers or {})
+        # Header names are case-insensitive (RFC 9110); normalize to lowercase to avoid duplicates.
+        headers: dict[str, str] = {k.lower(): v for k, v in (settings.proxy.headers or {}).items()}
 
         forward = {h.lower() for h in settings.proxy.forward_headers}
         strip = {h.lower() for h in settings.proxy.strip_headers}
         for key, value in (request_headers or {}).items():
             key_lower = key.lower()
             if (key_lower in forward or "*" in forward) and key_lower not in strip:
-                headers[key] = value
+                headers[key_lower] = value
 
-        headers.update(self._auth_headers())
+        headers.update({k.lower(): v for k, v in self._auth_headers().items()})
         return headers
 
     async def process(
@@ -67,7 +68,8 @@ class MessageProcessor:
         """Forward the payload to the backend and return (body, status, headers).
 
         Raises:
-            ProcessingError: if no backend is configured or the request fails.
+            FatalError: if no backend is configured.
+            RetryableError: if the request fails or times out.
         """
         url = settings.proxy.backend_url
         if not url:
@@ -86,7 +88,11 @@ class MessageProcessor:
             ) as response:
                 content_type = response.headers.get("Content-Type", "")
                 if "application/json" in content_type:
-                    body = await response.json()
+                    try:
+                        body = await response.json()
+                    except ValueError:
+                        # Empty or malformed body despite a JSON content type (e.g. 204/201).
+                        body = {"response": await response.text(), "content_type": content_type}
                 else:
                     body = {"response": await response.text(), "content_type": content_type}
 
@@ -99,6 +105,6 @@ class MessageProcessor:
                 return body, response.status, dict(resp_headers)
 
         except aiohttp.ClientError as e:
-            raise ProcessingError(f"Failed to proxy request: {e}") from e
+            raise RetryableError(f"Failed to proxy request: {e}") from e
         except TimeoutError:
-            raise ProcessingError("Request timeout") from None
+            raise RetryableError("Request timeout") from None
