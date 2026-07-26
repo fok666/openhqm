@@ -43,8 +43,7 @@ echo ""
 # 2. Install Python dependencies
 echo -e "${YELLOW}2. Installing Python dependencies${NC}"
 python3 -m pip install --upgrade pip
-python3 -m pip install -r requirements.txt
-python3 -m pip install -r requirements-dev.txt
+python3 -m pip install -e ".[dev]"
 echo -e "${GREEN}✓ Python dependencies installed${NC}"
 echo ""
 

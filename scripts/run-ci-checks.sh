@@ -83,7 +83,7 @@ fi
 # Check if ruff is available
 if ! $PYTHON_CMD -c "import ruff" 2>/dev/null; then
     echo -e "${YELLOW}Installing dependencies...${NC}"
-    $PYTHON_CMD -m pip install -q -r requirements.txt -r requirements-dev.txt
+    $PYTHON_CMD -m pip install -q -e ".[dev]"
 fi
 echo ""
 

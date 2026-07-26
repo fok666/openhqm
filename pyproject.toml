@@ -34,10 +34,24 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Queue backends — one extra per backend, mirrored by Docker QUEUE_BACKEND builds.
+redis = []     # Redis is a core dependency; extra exists so openhqm[redis] works uniformly
+kafka = ["aiokafka>=0.14.0"]
+sqs = ["aioboto3>=11.0.0"]
+azure = [
+    "azure-eventhub>=5.15.1",
+    "azure-eventhub-checkpointstoreblob-aio>=1.2.0",
+]
+gcp = ["google-cloud-pubsub>=2.37.0"]
+mqtt = ["aiomqtt>=2.0.0"]
+minimal = []   # no queue backend dependencies (custom handlers only)
+all = ["openhqm[kafka,sqs,azure,gcp,mqtt]"]
+
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=0.21.1",
     "pytest-cov>=4.1.0",
+    "httpx>=0.28.0",
     "ruff>=0.1.11",
     "mypy>=1.8.0",
     "bandit>=1.7.6",
@@ -138,11 +152,6 @@ ignore_errors = true
 [tool.bandit]
 exclude_dirs = ["tests"]
 skips = ["B101"]  # assert_used
-
-[tool.black]
-line-length = 100
-target-version = ["py313"]
-include = '\.pyi?$'
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
