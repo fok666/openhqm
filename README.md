@@ -7,31 +7,43 @@ OpenHQM decouples HTTP request handling from response delivery using a message
 queue. Deploy it as a **Kubernetes sidecar** to add async queue processing to an
 HTTP workload without changing the app.
 
-It does exactly two things:
+It does exactly two things — both ship in the same image, selected by argument:
 
-```text
-http-to-queue   client ──HTTP──▶ [openhqm] ──enqueue──▶ queue        (returns 202 + id)
-queue-to-http   queue ──consume──▶ [openhqm] ──HTTP──▶ your backend  (stores result)
+| Mode | Command | Role |
+| --- | --- | --- |
+| **http-to-queue** | `python -m openhqm http-to-queue` | Accept HTTP, enqueue, serve poll results |
+| **queue-to-http** | `python -m openhqm queue-to-http` | Consume queue, forward to your backend over HTTP |
+
+```mermaid
+flowchart LR
+    client([Client])
+    subgraph in ["openhqm · http-to-queue"]
+        api["API :8000"]
+    end
+    q[("Queue<br/>redis · kafka · sqs<br/>azure · gcp · mqtt")]
+    subgraph pod ["app pod"]
+        worker["openhqm · queue-to-http"]
+        backend["your app :8080"]
+    end
+    results[("Redis<br/>result store")]
+
+    client -- "1 · POST /submit → 202 + id" --> api
+    api -- "2 · enqueue" --> q
+    q -- "3 · consume" --> worker
+    worker -- "4 · HTTP localhost" --> backend
+    worker -- "5 · store result" --> results
+    client -. "6 · GET /response/{id}" .-> api
+    api -. reads .-> results
 ```
 
-Run them together and you get an async reverse proxy; run either alone for
-just ingress or just egress. Both modes are the same image, selected by argument.
-
-## How it works
-
-1. A client `POST`s to the **http-to-queue** sidecar. It enqueues the request and
-   returns `202` with a `correlation_id`.
-2. The **queue-to-http** sidecar consumes the message, forwards the payload to the
-   backend (typically the local app), and writes the result to a shared cache.
-3. The client polls for the result by `correlation_id`.
-
-Request state lives in the cache as `PENDING → PROCESSING → COMPLETED/FAILED`
-(TTL'd). Both modes drain gracefully on `SIGTERM`.
+Request state lives in the result store as `PENDING → PROCESSING → COMPLETED/FAILED`
+(TTL'd, keyed by `correlation_id`). Failed messages are retried with backoff, then
+land on a dead letter queue. Both modes drain gracefully on `SIGTERM`.
 
 ## Quick start
 
 ```bash
-pip install -r requirements.txt          # or requirements-queue-redis.txt for just Redis
+pip install -e .                          # core install = Redis backend
 cp .env.example .env                      # defaults target redis://localhost:6379
 
 # Terminal 1 — ingress (HTTP → queue)
@@ -52,35 +64,51 @@ curl -sX POST http://localhost:8000/api/v1/submit \
 curl http://localhost:8000/api/v1/response/<correlation_id>
 ```
 
+Or run the whole loop with Docker: `docker compose up` (Redis + ingress + workers + an httpbin backend).
+
 ## API (http-to-queue mode)
 
 | Method | Path | Description |
-|--------|------|-------------|
+| --- | --- | --- |
 | `POST` | `/api/v1/submit` | Enqueue a request, returns `202` + `correlation_id` |
-| `GET`  | `/api/v1/status/{id}` | Current status |
-| `GET`  | `/api/v1/response/{id}` | Result (`202` while still pending) |
-| `GET`  | `/health` | Liveness |
-| `GET`  | `/ready` | Readiness (queue + cache reachable) |
-| `GET`  | `/metrics` | Prometheus metrics |
-
-## Configuration
-
-Environment variables, prefix `OPENHQM_`, `__` for nesting. Key ones:
-
-```bash
-OPENHQM_QUEUE__TYPE=redis                       # redis|kafka|sqs|azure_eventhubs|gcp_pubsub|mqtt|custom
-OPENHQM_QUEUE__REDIS_URL=redis://localhost:6379
-OPENHQM_CACHE__REDIS_URL=redis://localhost:6379
-OPENHQM_PROXY__BACKEND_URL=http://localhost:8080   # queue-to-http target
-```
-
-See [`.env.example`](.env.example) for everything, and
-[docs/QUEUE_BACKENDS.md](docs/QUEUE_BACKENDS.md) for per-backend setup.
+| `GET` | `/api/v1/status/{id}` | Current status |
+| `GET` | `/api/v1/response/{id}` | Result (`202` while still pending) |
+| `GET` | `/health` | Liveness |
+| `GET` | `/ready` | Readiness (queue + cache reachable) |
+| `GET` | `/metrics` | Prometheus metrics |
 
 ## Queue backends
 
-Redis Streams (default), Apache Kafka, AWS SQS, Azure Event Hubs, GCP Pub/Sub,
-MQTT, or a custom handler. See [docs/QUEUE_BACKENDS.md](docs/QUEUE_BACKENDS.md).
+One pyproject extra per backend; the Docker `QUEUE_BACKEND` build arg uses the
+same names to build slim per-backend images.
+
+| Backend | Install | Config |
+| --- | --- | --- |
+| Redis Streams (default) | `pip install -e .` | `OPENHQM_QUEUE__TYPE=redis` |
+| Apache Kafka | `pip install -e ".[kafka]"` | `OPENHQM_QUEUE__TYPE=kafka` |
+| AWS SQS | `pip install -e ".[sqs]"` | `OPENHQM_QUEUE__TYPE=sqs` |
+| Azure Event Hubs | `pip install -e ".[azure]"` | `OPENHQM_QUEUE__TYPE=azure_eventhubs` |
+| GCP Pub/Sub | `pip install -e ".[gcp]"` | `OPENHQM_QUEUE__TYPE=gcp_pubsub` |
+| MQTT | `pip install -e ".[mqtt]"` | `OPENHQM_QUEUE__TYPE=mqtt` |
+| Bring your own | — | `OPENHQM_QUEUE__TYPE=custom` |
+
+Per-backend settings, semantics, and how to write a custom adapter (a 4-method
+class): [docs/QUEUE_BACKENDS.md](docs/QUEUE_BACKENDS.md).
+
+## Configuration
+
+Everything is an environment variable: prefix `OPENHQM_`, `__` for nesting.
+All knobs live in one file — [`src/openhqm/config.py`](src/openhqm/config.py) —
+and [`.env.example`](.env.example) lists them ready to copy. The ones that matter first:
+
+```bash
+OPENHQM_QUEUE__TYPE=redis                          # which backend
+OPENHQM_QUEUE__REDIS_URL=redis://localhost:6379
+OPENHQM_CACHE__REDIS_URL=redis://localhost:6379    # result store
+OPENHQM_PROXY__BACKEND_URL=http://localhost:8080   # queue-to-http forward target
+OPENHQM_WORKER__BATCH_SIZE=10                      # throughput knob
+OPENHQM_CACHE__TTL_SECONDS=3600                    # how long results stay pollable
+```
 
 ## Deployment
 
@@ -91,8 +119,8 @@ Runs as a sidecar behind a Kubernetes Gateway. See
 ## Development
 
 ```bash
-pip install -r requirements-dev.txt
-pytest                # unit tests run without Redis; integration tests auto-skip
+pip install -e ".[dev]"
+pytest                # integration tests auto-skip without a local Redis
 ruff check . && ruff format --check .
 ```
 

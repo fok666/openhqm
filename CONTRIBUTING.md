@@ -322,7 +322,7 @@ make coverage
 ## Documentation
 
 * Update README.md for user-facing changes
-* Update SDD.md for architectural changes
+* Update docs/ for architectural changes
 * Add docstrings to all public APIs
 * Update examples if API changes
 
