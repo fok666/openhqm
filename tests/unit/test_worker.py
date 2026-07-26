@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from structlog.testing import capture_logs
 
-from openhqm.cache.interface import CacheInterface
+from openhqm.cache import Cache
 from openhqm.exceptions import FatalError, RetryableError
 from openhqm.queue import Queue
 from openhqm.worker.processor import MessageProcessor
@@ -26,7 +26,7 @@ def mock_queue():
 @pytest.fixture
 def mock_cache():
     """Create mock cache."""
-    cache = AsyncMock(spec=CacheInterface)
+    cache = AsyncMock(spec=Cache)
     cache.set = AsyncMock()
     cache.get = AsyncMock()
     cache.close = AsyncMock()

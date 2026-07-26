@@ -1,12 +1,11 @@
 """Dependency injection for FastAPI."""
 
-from openhqm.cache.factory import create_cache
-from openhqm.cache.interface import CacheInterface
+from openhqm.cache import Cache, create_cache
 from openhqm.queue import Queue, create_queue
 
 # Global instances
 _queue_instance: Queue | None = None
-_cache_instance: CacheInterface | None = None
+_cache_instance: Cache | None = None
 
 
 async def get_queue() -> Queue:
@@ -22,7 +21,7 @@ async def get_queue() -> Queue:
     return _queue_instance
 
 
-async def get_cache() -> CacheInterface:
+async def get_cache() -> Cache:
     """
     Get cache instance.
 

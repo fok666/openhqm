@@ -8,8 +8,7 @@ from typing import Any
 
 import structlog
 
-from openhqm.cache.factory import create_cache
-from openhqm.cache.interface import CacheInterface
+from openhqm.cache import Cache, create_cache, meta_key, resp_key
 from openhqm.config import settings
 from openhqm.exceptions import FatalError, RetryableError
 from openhqm.queue import Queue, create_queue
@@ -26,7 +25,7 @@ class Worker:
         self,
         worker_id: str,
         queue: Queue,
-        cache: CacheInterface,
+        cache: Cache,
         processor: MessageProcessor,
     ):
         self.worker_id = worker_id
@@ -83,7 +82,7 @@ class Worker:
 
         try:
             await self.cache.set(
-                f"req:{correlation_id}:meta",
+                meta_key(correlation_id),
                 {
                     "status": "PROCESSING",
                     "submitted_at": message.get("timestamp"),
@@ -101,7 +100,7 @@ class Worker:
             processing_time = (time.time() - start_time) * 1000  # ms
 
             await self.cache.set(
-                f"req:{correlation_id}:meta",
+                meta_key(correlation_id),
                 {
                     "status": "COMPLETED",
                     "submitted_at": message.get("timestamp"),
@@ -110,7 +109,7 @@ class Worker:
                 ttl=settings.cache.ttl_seconds,
             )
             await self.cache.set(
-                f"resp:{correlation_id}",
+                resp_key(correlation_id),
                 {
                     "result": result,
                     "status_code": status_code,
@@ -180,12 +179,12 @@ class Worker:
         """Mark a request FAILED in the cache so pollers see the error."""
         try:
             await self.cache.set(
-                f"req:{correlation_id}:meta",
+                meta_key(correlation_id),
                 {"status": "FAILED", "updated_at": datetime.now(UTC).isoformat()},
                 ttl=settings.cache.ttl_seconds,
             )
             await self.cache.set(
-                f"resp:{correlation_id}",
+                resp_key(correlation_id),
                 {"error": error, "completed_at": datetime.now(UTC).isoformat()},
                 ttl=settings.cache.ttl_seconds,
             )

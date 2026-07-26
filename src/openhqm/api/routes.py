@@ -15,7 +15,7 @@ from openhqm.api.models import (
     SubmitRequest,
     SubmitResponse,
 )
-from openhqm.cache.interface import CacheInterface
+from openhqm.cache import Cache, meta_key, resp_key
 from openhqm.config import settings
 from openhqm.exceptions import QueueError
 from openhqm.queue import Queue
@@ -36,7 +36,7 @@ router = APIRouter(prefix="/api/v1", tags=["requests"])
 async def submit_request(
     request: SubmitRequest,
     queue: Queue = Depends(get_queue),
-    cache: CacheInterface = Depends(get_cache),
+    cache: Cache = Depends(get_cache),
 ) -> SubmitResponse:
     """
     Submit a request for asynchronous processing.
@@ -76,7 +76,7 @@ async def submit_request(
     try:
         # Store metadata in cache
         await cache.set(
-            f"req:{correlation_id}:meta",
+            meta_key(correlation_id),
             {
                 "status": RequestStatus.PENDING.value,
                 "submitted_at": submitted_at.isoformat(),
@@ -122,7 +122,7 @@ async def submit_request(
 )
 async def get_status(
     correlation_id: str,
-    cache: CacheInterface = Depends(get_cache),
+    cache: Cache = Depends(get_cache),
 ) -> StatusResponse:
     """
     Get the status of a request.
@@ -142,7 +142,7 @@ async def get_status(
 
     try:
         # Get metadata from cache
-        metadata = await cache.get(f"req:{correlation_id}:meta")
+        metadata = await cache.get(meta_key(correlation_id))
         if not metadata:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -174,7 +174,7 @@ async def get_status(
 )
 async def get_response(
     correlation_id: str,
-    cache: CacheInterface = Depends(get_cache),
+    cache: Cache = Depends(get_cache),
 ) -> ResultResponse | JSONResponse:
     """
     Get the result of a processed request.
@@ -194,7 +194,7 @@ async def get_response(
 
     try:
         # Get metadata
-        metadata = await cache.get(f"req:{correlation_id}:meta")
+        metadata = await cache.get(meta_key(correlation_id))
         if not metadata:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -204,7 +204,7 @@ async def get_response(
         req_status = RequestStatus(metadata["status"])
 
         # Get response if available
-        response_data = await cache.get(f"resp:{correlation_id}")
+        response_data = await cache.get(resp_key(correlation_id))
 
         if req_status == RequestStatus.COMPLETED and response_data:
             return ResultResponse(
