@@ -18,7 +18,7 @@ FROM python:3.13-slim
 ARG QUEUE_BACKEND
 LABEL org.opencontainers.image.title="OpenHQM" \
       org.opencontainers.image.description="HTTP/queue bridge sidecar - Queue Backend: ${QUEUE_BACKEND}" \
-      org.opencontainers.image.source="https://github.com/yourusername/openhqm" \
+      org.opencontainers.image.source="https://github.com/fok666/openhqm" \
       queue.backend="${QUEUE_BACKEND}"
 
 # curl for container healthchecks

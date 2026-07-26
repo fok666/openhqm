@@ -42,7 +42,7 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 1. **Fork and clone the repository**
 
 ```bash
-git clone https://github.com/yourusername/openhqm.git
+git clone https://github.com/fok666/openhqm.git
 cd openhqm
 ```
 
@@ -266,7 +266,7 @@ openhqm/
 To add support for a new message queue backend:
 
 1. Create a new file in `src/openhqm/queue/` (e.g., `kafka_queue.py`)
-2. Implement the `MessageQueueInterface`
+2. Implement the `Queue` contract (see docs/QUEUE_BACKENDS.md)
 3. Add factory logic in `queue/factory.py`
 4. Add configuration in `config/settings.py`
 5. Write unit and integration tests
@@ -394,8 +394,8 @@ The CHANGELOG.md is automatically generated from commit messages. Structure your
 ## Getting Help
 
 * Check the [documentation](docs/)
-* Look at [existing issues](https://github.com/yourusername/openhqm/issues)
-* Ask in [GitHub Discussions](https://github.com/yourusername/openhqm/discussions)
+* Look at [existing issues](https://github.com/fok666/openhqm/issues)
+* Ask in [GitHub Discussions](https://github.com/fok666/openhqm/discussions)
 
 ## Recognition
 

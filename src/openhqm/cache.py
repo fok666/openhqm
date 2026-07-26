@@ -36,7 +36,7 @@ class Cache:
         self.redis = aioredis.from_url(
             self.url, max_connections=self.max_connections, decode_responses=True
         )
-        await self.redis.ping()
+        await self.redis.ping()  # type: ignore[misc]
         logger.info("Connected to Redis cache", url=self.url)
 
     async def close(self) -> None:
@@ -44,6 +44,8 @@ class Cache:
             await self.redis.aclose()
 
     async def get(self, key: str) -> dict[str, Any] | None:
+        if self.redis is None:
+            raise RuntimeError("Cache.connect() not called")
         try:
             value = await self.redis.get(key)
             return json.loads(value) if value else None
@@ -52,6 +54,8 @@ class Cache:
             return None
 
     async def set(self, key: str, value: dict[str, Any], ttl: int | None = None) -> bool:
+        if self.redis is None:
+            raise RuntimeError("Cache.connect() not called")
         try:
             await self.redis.set(key, json.dumps(value), ex=ttl or self.default_ttl)
             return True

@@ -33,7 +33,7 @@ spec:
       terminationGracePeriodSeconds: 30   # let in-flight HTTP drain
       containers:
         - name: openhqm
-          image: ghcr.io/yourusername/openhqm:latest-redis
+          image: ghcr.io/fok666/openhqm:latest-redis
           args: ["python", "-m", "openhqm", "http-to-queue"]
           ports: [{ containerPort: 8000 }]
           envFrom: [{ configMapRef: { name: openhqm-config } }]
@@ -86,7 +86,7 @@ spec:
           image: my-app:latest
           ports: [{ containerPort: 8080 }]
         - name: openhqm                    # queue-to-http sidecar
-          image: ghcr.io/yourusername/openhqm:latest-redis
+          image: ghcr.io/fok666/openhqm:latest-redis
           args: ["python", "-m", "openhqm", "queue-to-http"]
           envFrom: [{ configMapRef: { name: openhqm-config } }]
           env:

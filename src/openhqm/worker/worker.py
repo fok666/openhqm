@@ -74,7 +74,7 @@ class Worker:
 
     async def _handle_message(self, message: dict[str, Any]) -> None:
         """Process a single message: forward to backend, store the result for polling."""
-        correlation_id = message.get("correlation_id")
+        correlation_id = message.get("correlation_id") or "unknown"
         self.current_message = correlation_id
         log = logger.bind(worker_id=self.worker_id, correlation_id=correlation_id)
         log.info("Processing message")
