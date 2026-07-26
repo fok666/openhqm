@@ -16,7 +16,9 @@ from openhqm.api.models import (
     SubmitResponse,
 )
 from openhqm.cache.interface import CacheInterface
-from openhqm.queue.interface import MessageQueueInterface
+from openhqm.config import settings
+from openhqm.exceptions import QueueError
+from openhqm.queue import Queue
 from openhqm.utils.metrics import metrics
 
 logger = structlog.get_logger(__name__)
@@ -33,7 +35,7 @@ router = APIRouter(prefix="/api/v1", tags=["requests"])
 )
 async def submit_request(
     request: SubmitRequest,
-    queue: MessageQueueInterface = Depends(get_queue),
+    queue: Queue = Depends(get_queue),
     cache: CacheInterface = Depends(get_cache),
 ) -> SubmitResponse:
     """
@@ -84,13 +86,7 @@ async def submit_request(
         )
 
         # Publish to queue
-        success = await queue.publish("requests", message)
-        if not success:
-            metrics.queue_publish_total.labels(queue_name="requests", status="failed").inc()
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Unable to queue request. Service temporarily unavailable.",
-            )
+        await queue.publish(settings.queue.request_queue_name, message)
 
         metrics.queue_publish_total.labels(queue_name="requests", status="success").inc()
         log.info("Request submitted successfully")
@@ -103,6 +99,13 @@ async def submit_request(
 
     except HTTPException:
         raise
+    except QueueError as e:
+        metrics.queue_publish_total.labels(queue_name="requests", status="failed").inc()
+        log.error("Failed to queue request", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to queue request. Service temporarily unavailable.",
+        ) from e
     except Exception as e:
         log.error("Failed to submit request", error=str(e))
         raise HTTPException(

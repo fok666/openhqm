@@ -12,8 +12,7 @@ from openhqm.cache.factory import create_cache
 from openhqm.cache.interface import CacheInterface
 from openhqm.config import settings
 from openhqm.exceptions import FatalError, RetryableError
-from openhqm.queue.factory import create_queue
-from openhqm.queue.interface import MessageQueueInterface
+from openhqm.queue import Queue, create_queue
 from openhqm.utils.metrics import metrics
 from openhqm.worker.processor import MessageProcessor
 
@@ -26,7 +25,7 @@ class Worker:
     def __init__(
         self,
         worker_id: str,
-        queue: MessageQueueInterface,
+        queue: Queue,
         cache: CacheInterface,
         processor: MessageProcessor,
     ):
@@ -45,7 +44,9 @@ class Worker:
 
         consume_task = asyncio.ensure_future(
             self.queue.consume(
-                "requests", self._handle_message, batch_size=settings.worker.batch_size
+                settings.queue.request_queue_name,
+                self._handle_message,
+                batch_size=settings.worker.batch_size,
             )
         )
 
@@ -133,7 +134,7 @@ class Worker:
                 # ponytail: blocking backoff (worst case ~2^max_retries s); move to
                 # delayed redelivery on the queue if per-worker throughput matters
                 await asyncio.sleep(2**retry_count)
-                await self.queue.publish("requests", message)
+                await self.queue.publish(settings.queue.request_queue_name, message)
                 log.info("Message requeued", retry_count=retry_count + 1)
             else:
                 log.error("Max retries exceeded, sending to DLQ")
@@ -197,7 +198,7 @@ class Worker:
         """Release resources. The in-flight message (if any) is already done or will be redelivered."""
         logger.info("Shutting down worker", worker_id=self.worker_id)
         metrics.worker_active.labels(worker_id=self.worker_id).set(0)
-        await self.queue.disconnect()
+        await self.queue.close()
         await self.cache.close()
         logger.info("Worker shutdown complete", worker_id=self.worker_id)
 

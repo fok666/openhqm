@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 
+from openhqm.config import QueueSettings
 from openhqm.queue.redis_queue import RedisQueue
 
 
@@ -11,14 +12,13 @@ from openhqm.queue.redis_queue import RedisQueue
 @pytest.mark.asyncio
 async def test_redis_queue_publish_consume():
     """Test publishing and consuming messages."""
-    queue = RedisQueue(url="redis://localhost:6379")
+    queue = RedisQueue(QueueSettings(redis_url="redis://localhost:6379"))
     await queue.connect()
 
     # Publish message
     message = {"correlation_id": "test-123", "payload": {"data": "test"}}
 
-    success = await queue.publish("test-queue", message)
-    assert success is True
+    await queue.publish("test-queue", message)
 
     # Consume message
     received = []
@@ -39,16 +39,16 @@ async def test_redis_queue_publish_consume():
     assert len(received) > 0
     assert received[0]["correlation_id"] == "test-123"
 
-    await queue.disconnect()
+    await queue.close()
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_redis_queue_connection():
     """Test Redis queue connection."""
-    queue = RedisQueue(url="redis://localhost:6379")
+    queue = RedisQueue(QueueSettings(redis_url="redis://localhost:6379"))
 
     await queue.connect()
     assert queue.redis is not None
 
-    await queue.disconnect()
+    await queue.close()

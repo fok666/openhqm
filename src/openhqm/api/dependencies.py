@@ -2,15 +2,14 @@
 
 from openhqm.cache.factory import create_cache
 from openhqm.cache.interface import CacheInterface
-from openhqm.queue.factory import create_queue
-from openhqm.queue.interface import MessageQueueInterface
+from openhqm.queue import Queue, create_queue
 
 # Global instances
-_queue_instance: MessageQueueInterface | None = None
+_queue_instance: Queue | None = None
 _cache_instance: CacheInterface | None = None
 
 
-async def get_queue() -> MessageQueueInterface:
+async def get_queue() -> Queue:
     """
     Get message queue instance.
 
@@ -41,7 +40,7 @@ async def cleanup_resources():
     global _queue_instance, _cache_instance
 
     if _queue_instance:
-        await _queue_instance.disconnect()
+        await _queue_instance.close()
         _queue_instance = None
 
     if _cache_instance:

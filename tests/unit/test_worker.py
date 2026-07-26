@@ -8,7 +8,7 @@ from structlog.testing import capture_logs
 
 from openhqm.cache.interface import CacheInterface
 from openhqm.exceptions import FatalError, RetryableError
-from openhqm.queue.interface import MessageQueueInterface
+from openhqm.queue import Queue
 from openhqm.worker.processor import MessageProcessor
 from openhqm.worker.worker import Worker
 
@@ -16,10 +16,10 @@ from openhqm.worker.worker import Worker
 @pytest.fixture
 def mock_queue():
     """Create mock queue."""
-    queue = AsyncMock(spec=MessageQueueInterface)
+    queue = AsyncMock(spec=Queue)
     queue.consume = AsyncMock()
     queue.publish = AsyncMock()
-    queue.disconnect = AsyncMock()
+    queue.close = AsyncMock()
     return queue
 
 
@@ -220,7 +220,7 @@ async def test_worker_drains_and_closes_on_cancel(worker, mock_queue, mock_cache
     # start() should swallow the cancellation and run shutdown()
     await worker.start()
 
-    mock_queue.disconnect.assert_called_once()
+    mock_queue.close.assert_called_once()
     mock_cache.close.assert_called_once()
 
 
@@ -229,7 +229,7 @@ async def test_worker_shutdown_closes_connections(worker, mock_queue, mock_cache
     """Test that shutdown properly closes queue and cache."""
     await worker.shutdown()
 
-    mock_queue.disconnect.assert_called_once()
+    mock_queue.close.assert_called_once()
     mock_cache.close.assert_called_once()
 
 
