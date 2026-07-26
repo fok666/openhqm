@@ -8,33 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Initial project structure
-- FastAPI-based HTTP API listener
-- Redis Streams message queue implementation
-- Asynchronous worker pool
-- Request/response correlation tracking
-- Prometheus metrics
-- Structured logging with structlog
-- Docker and Docker Compose support
-- GitHub Actions CI/CD pipelines
-- Comprehensive test suite
-- Project documentation (SDD, Architecture)
-- AI coding instructions (Copilot, Gemini)
+- Two sidecar modes in one image: `http-to-queue` and `queue-to-http`
+- Queue adapters: Redis Streams, Kafka, SQS, Azure Event Hubs, GCP Pub/Sub, MQTT, custom
+- Minimal 4-method queue contract (`connect/close/publish/consume`)
+- Per-backend installs via pyproject extras, mirrored by Docker `QUEUE_BACKEND` builds
+- Redis result store with TTL'd request state (`PENDING → PROCESSING → COMPLETED/FAILED`)
+- Retry with backoff + dead letter queue
+- Prometheus metrics, structured logging, K8s liveness/readiness probes
 
-### Coming Soon
-- Kafka queue implementation
-- AWS SQS queue implementation
-- WebSocket support for real-time responses
-- Admin dashboard
-- Kubernetes deployment manifests
-
-## [0.1.0] - 2026-02-07
-
-### Added
-- Initial release of OpenHQM
-- Core async HTTP request/response handling
-- Redis-based message queuing
-- Worker pool for message processing
-- RESTful API endpoints
-- Health checks and monitoring
-- Docker deployment support
+### Changed
+- Requirements files replaced by pyproject extras
+- Routing/partitioning engines removed — the Gateway does the routing

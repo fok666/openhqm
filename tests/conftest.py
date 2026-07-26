@@ -6,7 +6,8 @@ from collections.abc import AsyncGenerator
 
 import pytest
 
-from openhqm.cache.redis_cache import RedisCache
+from openhqm.cache import Cache
+from openhqm.config import QueueSettings
 from openhqm.queue.redis_queue import RedisQueue
 
 
@@ -45,18 +46,18 @@ async def redis_queue(redis_available) -> AsyncGenerator[RedisQueue]:
     """Create Redis queue for testing."""
     if not redis_available:
         pytest.skip("Redis not available")
-    queue = RedisQueue(url="redis://localhost:6379")
+    queue = RedisQueue(QueueSettings(redis_url="redis://localhost:6379"))
     await queue.connect()
     yield queue
-    await queue.disconnect()
+    await queue.close()
 
 
 @pytest.fixture
-async def redis_cache(redis_available) -> AsyncGenerator[RedisCache]:
+async def redis_cache(redis_available) -> AsyncGenerator[Cache]:
     """Create Redis cache for testing."""
     if not redis_available:
         pytest.skip("Redis not available")
-    cache = RedisCache(url="redis://localhost:6379")
+    cache = Cache(url="redis://localhost:6379")
     await cache.connect()
     yield cache
     await cache.close()

@@ -34,24 +34,34 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Queue backends — one extra per backend, mirrored by Docker QUEUE_BACKEND builds.
+redis = []     # Redis is a core dependency; extra exists so openhqm[redis] works uniformly
+kafka = ["aiokafka>=0.14.0"]
+sqs = ["aioboto3>=11.0.0"]
+azure = [
+    "azure-eventhub>=5.15.1",
+    "azure-eventhub-checkpointstoreblob-aio>=1.2.0",
+]
+gcp = ["google-cloud-pubsub>=2.37.0"]
+mqtt = ["aiomqtt>=2.0.0"]
+minimal = []   # no queue backend dependencies (custom handlers only)
+all = ["openhqm[kafka,sqs,azure,gcp,mqtt]"]
+
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=0.21.1",
     "pytest-cov>=4.1.0",
+    "httpx>=0.28.0",
     "ruff>=0.1.11",
     "mypy>=1.8.0",
     "bandit>=1.7.6",
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/openhqm"
-Documentation = "https://github.com/yourusername/openhqm/docs"
-Repository = "https://github.com/yourusername/openhqm"
-Issues = "https://github.com/yourusername/openhqm/issues"
-
-[project.scripts]
-openhqm-api = "openhqm.api.listener:main"
-openhqm-worker = "openhqm.worker.worker:main"
+Homepage = "https://github.com/fok666/openhqm"
+Documentation = "https://github.com/fok666/openhqm/docs"
+Repository = "https://github.com/fok666/openhqm"
+Issues = "https://github.com/fok666/openhqm/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -134,33 +144,14 @@ module = [
 ]
 ignore_missing_imports = true
 
-# Optional queue implementations - less strict
+# Adapters import optional backend SDKs - less strict
 [[tool.mypy.overrides]]
-module = [
-    "openhqm.queue.mqtt",
-    "openhqm.queue.gcp_pubsub",
-    "openhqm.queue.azure_eventhubs",
-    "openhqm.queue.custom",
-    "openhqm.queue.kafka_queue",
-    "openhqm.queue.sqs_queue",
-    "openhqm.queue.redis_queue",
-    "openhqm.queue.factory",
-    "openhqm.queue.interface",
-    "openhqm.cache.redis_cache",
-    "openhqm.worker.processor",
-    "openhqm.worker.worker",
-    "openhqm.utils.logging",
-]
+module = ["openhqm.queue.*"]
 ignore_errors = true
 
 [tool.bandit]
 exclude_dirs = ["tests"]
 skips = ["B101"]  # assert_used
-
-[tool.black]
-line-length = 100
-target-version = ["py313"]
-include = '\.pyi?$'
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]

@@ -1,3 +1,0 @@
-# MQTT queue backend
-asyncio-mqtt>=0.16.0
-paho-mqtt>=1.6.1

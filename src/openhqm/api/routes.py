@@ -4,8 +4,10 @@ import uuid
 from datetime import UTC, datetime
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 
+from openhqm import metrics
 from openhqm.api.dependencies import get_cache, get_queue
 from openhqm.api.models import (
     RequestStatus,
@@ -14,9 +16,10 @@ from openhqm.api.models import (
     SubmitRequest,
     SubmitResponse,
 )
-from openhqm.cache.interface import CacheInterface
-from openhqm.queue.interface import MessageQueueInterface
-from openhqm.utils.metrics import metrics
+from openhqm.cache import Cache, meta_key, resp_key
+from openhqm.config import settings
+from openhqm.exceptions import QueueError
+from openhqm.queue import Queue
 
 logger = structlog.get_logger(__name__)
 
@@ -32,8 +35,8 @@ router = APIRouter(prefix="/api/v1", tags=["requests"])
 )
 async def submit_request(
     request: SubmitRequest,
-    queue: MessageQueueInterface = Depends(get_queue),
-    cache: CacheInterface = Depends(get_cache),
+    queue: Queue = Depends(get_queue),
+    cache: Cache = Depends(get_cache),
 ) -> SubmitResponse:
     """
     Submit a request for asynchronous processing.
@@ -67,29 +70,23 @@ async def submit_request(
         "payload": request.payload,
         "headers": request.headers,
         "timestamp": submitted_at.isoformat(),
-        "metadata": request.metadata.model_dump() if request.metadata else {},
+        "metadata": request.metadata or {},
     }
 
     try:
         # Store metadata in cache
         await cache.set(
-            f"req:{correlation_id}:meta",
+            meta_key(correlation_id),
             {
                 "status": RequestStatus.PENDING.value,
                 "submitted_at": submitted_at.isoformat(),
                 "updated_at": submitted_at.isoformat(),
             },
-            ttl=3600,
+            ttl=settings.cache.ttl_seconds,
         )
 
         # Publish to queue
-        success = await queue.publish("requests", message)
-        if not success:
-            metrics.queue_publish_total.labels(queue_name="requests", status="failed").inc()
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Unable to queue request. Service temporarily unavailable.",
-            )
+        await queue.publish(settings.queue.request_queue_name, message)
 
         metrics.queue_publish_total.labels(queue_name="requests", status="success").inc()
         log.info("Request submitted successfully")
@@ -102,6 +99,13 @@ async def submit_request(
 
     except HTTPException:
         raise
+    except QueueError as e:
+        metrics.queue_publish_total.labels(queue_name="requests", status="failed").inc()
+        log.error("Failed to queue request", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to queue request. Service temporarily unavailable.",
+        ) from e
     except Exception as e:
         log.error("Failed to submit request", error=str(e))
         raise HTTPException(
@@ -118,7 +122,7 @@ async def submit_request(
 )
 async def get_status(
     correlation_id: str,
-    cache: CacheInterface = Depends(get_cache),
+    cache: Cache = Depends(get_cache),
 ) -> StatusResponse:
     """
     Get the status of a request.
@@ -138,7 +142,7 @@ async def get_status(
 
     try:
         # Get metadata from cache
-        metadata = await cache.get(f"req:{correlation_id}:meta")
+        metadata = await cache.get(meta_key(correlation_id))
         if not metadata:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -170,9 +174,8 @@ async def get_status(
 )
 async def get_response(
     correlation_id: str,
-    cache: CacheInterface = Depends(get_cache),
-    response: Response = None,  # type: ignore[assignment]
-) -> ResultResponse:
+    cache: Cache = Depends(get_cache),
+) -> ResultResponse | JSONResponse:
     """
     Get the result of a processed request.
 
@@ -191,7 +194,7 @@ async def get_response(
 
     try:
         # Get metadata
-        metadata = await cache.get(f"req:{correlation_id}:meta")
+        metadata = await cache.get(meta_key(correlation_id))
         if not metadata:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -201,7 +204,7 @@ async def get_response(
         req_status = RequestStatus(metadata["status"])
 
         # Get response if available
-        response_data = await cache.get(f"resp:{correlation_id}")
+        response_data = await cache.get(resp_key(correlation_id))
 
         if req_status == RequestStatus.COMPLETED and response_data:
             return ResultResponse(
@@ -223,14 +226,14 @@ async def get_response(
                 ),
             )
         else:
-            # Still processing — set 202 Accepted on the response object so
-            # FastAPI serialises through ResultResponse (keeps the type correct)
-            if response is not None:
-                response.status_code = status.HTTP_202_ACCEPTED
-            return ResultResponse(
-                correlation_id=correlation_id,
-                status=req_status,
-                result=None,
+            # Still processing - return HTTP 202 Accepted
+            return JSONResponse(
+                status_code=status.HTTP_202_ACCEPTED,
+                content={
+                    "correlation_id": correlation_id,
+                    "status": req_status.value,
+                    "result": None,
+                },
             )
 
     except HTTPException:

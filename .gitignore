@@ -166,3 +166,8 @@ cython_debug/
 
 # Archived files
 .archive/
+
+.cachebro/
+.claude/
+# Coverage artifacts
+coverage.json

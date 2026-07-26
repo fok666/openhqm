@@ -10,13 +10,12 @@ from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response
 
-from openhqm import __version__
+from openhqm import __version__, metrics
 from openhqm.api.dependencies import cleanup_resources, get_cache, get_queue
 from openhqm.api.models import HealthResponse
 from openhqm.api.routes import router
 from openhqm.config import settings
-from openhqm.utils.logging import setup_logging
-from openhqm.utils.metrics import metrics
+from openhqm.logging import setup_logging
 
 logger = structlog.get_logger(__name__)
 
@@ -103,6 +102,17 @@ def create_app() -> FastAPI:
             timestamp=datetime.now(UTC),
             components=components,
         )
+
+    # Readiness probe: 503 until queue + cache are reachable
+    @app.get("/ready", tags=["health"])
+    async def ready() -> Response:
+        """Kubernetes readiness probe."""
+        try:
+            await get_queue()
+            await get_cache()
+        except Exception:
+            return JSONResponse(status_code=503, content={"status": "not_ready"})
+        return JSONResponse(status_code=200, content={"status": "ready"})
 
     # Metrics endpoint
     if settings.monitoring.metrics_enabled:
