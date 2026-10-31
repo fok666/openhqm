@@ -2,7 +2,7 @@
 # all (default) | redis | kafka | sqs | azure | gcp | mqtt | minimal
 ARG QUEUE_BACKEND=all
 
-FROM python:3.13-slim AS builder
+FROM python:3.15-slim AS builder
 ARG QUEUE_BACKEND
 
 WORKDIR /build
@@ -13,7 +13,7 @@ COPY pyproject.toml README.md LICENSE ./
 COPY src/ src/
 RUN pip install --no-cache-dir --user ".[${QUEUE_BACKEND}]"
 
-FROM python:3.13-slim
+FROM python:3.15-slim
 
 ARG QUEUE_BACKEND
 LABEL org.opencontainers.image.title="OpenHQM" \
